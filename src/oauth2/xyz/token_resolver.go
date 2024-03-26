@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/strutil"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
 	"github.com/redis/go-redis/v9"
 	"log"
 	"reflect"
@@ -18,20 +18,20 @@ import (
 type OAuth2ProxyTokenResolver struct {
 	cli            redis.UniversalClient
 	paramTokenName string
-	tokenType      oauth2.TokenType
+	tokenType      types.TokenType
 }
 
 func (d OAuth2ProxyTokenResolver) UriParamTokenName() string {
 	return d.paramTokenName
 }
 
-func (d OAuth2ProxyTokenResolver) TokenType() oauth2.TokenType {
+func (d OAuth2ProxyTokenResolver) TokenType() types.TokenType {
 	return d.tokenType
 }
 
 func (d OAuth2ProxyTokenResolver) Save(
 	c *gin.Context,
-	t *oauth2.Token,
+	t *types.Token,
 	expire time.Duration) error {
 	sess := sessions.Default(c)
 	tokenKey := sessionTokenKey(sess.ID())
@@ -66,12 +66,12 @@ func (d OAuth2ProxyTokenResolver) Del(c *gin.Context) {
 	d.cli.Del(context.Background(), sessionTokenKey(sess.ID()))
 }
 
-func (d OAuth2ProxyTokenResolver) Resolve(c *gin.Context) *oauth2.Token {
+func (d OAuth2ProxyTokenResolver) Resolve(c *gin.Context) *types.Token {
 	prefixOAuth2 := d.tokenType
 	authorization := c.GetHeader("Authorization")
 	if authorization != "" {
 		log.Print("access token from header")
-		return &oauth2.Token{Type: prefixOAuth2, Value: strings.TrimSpace(authorization[len(string(prefixOAuth2)):])}
+		return &types.Token{Type: prefixOAuth2, Value: strings.TrimSpace(authorization[len(string(prefixOAuth2)):])}
 	}
 
 	token := c.Query(d.paramTokenName)
@@ -80,9 +80,9 @@ func (d OAuth2ProxyTokenResolver) Resolve(c *gin.Context) *oauth2.Token {
 		tmp := strings.TrimSpace(token)
 		split := strings.Split(tmp, " ")
 		if len(split) == 2 {
-			return &oauth2.Token{Type: oauth2.TokenType(strings.TrimSpace(split[0])), Value: strings.TrimSpace(split[1])}
+			return &types.Token{Type: types.TokenType(strings.TrimSpace(split[0])), Value: strings.TrimSpace(split[1])}
 		}
-		return &oauth2.Token{Type: oauth2.OAUTH2, Value: strings.TrimSpace(split[0])}
+		return &types.Token{Type: types.OAUTH2, Value: strings.TrimSpace(split[0])}
 	}
 	sess := sessions.Default(c)
 	log.Println("try get token from session, session id:" + sess.ID())
@@ -90,8 +90,8 @@ func (d OAuth2ProxyTokenResolver) Resolve(c *gin.Context) *oauth2.Token {
 	if cache == nil {
 		return nil
 	}
-	return &oauth2.Token{
-		Type:   oauth2.TokenType(strutil.ToString(cache["type"])),
+	return &types.Token{
+		Type:   types.TokenType(strutil.ToString(cache["type"])),
 		Value:  strutil.ToString(cache["value"]),
 		Params: toMap(cache["params"], nil),
 	}
@@ -112,6 +112,6 @@ func NewTokenResolver(cli redis.UniversalClient) *OAuth2ProxyTokenResolver {
 	return &OAuth2ProxyTokenResolver{
 		cli:            cli,
 		paramTokenName: env.GetString("OAUTH2_URI_PARAM_TOKEN_NAME", "authz"),
-		tokenType:      oauth2.TokenType(env.GetString("OAUTH2_TOKEN_TYPE", "OAuth2")),
+		tokenType:      types.TokenType(env.GetString("OAUTH2_TOKEN_TYPE", "OAuth2")),
 	}
 }

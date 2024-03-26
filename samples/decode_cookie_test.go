@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"github.com/gorilla/securecookie"
 	"github.com/lucky-xin/xyz-common-go/strutil"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
 	"log"
 	"reflect"
 	"strings"
@@ -13,8 +13,8 @@ import (
 )
 
 func TestSerToken(t *testing.T) {
-	token := oauth2.Token{
-		Type:   oauth2.OAUTH2,
+	token := types.Token{
+		Type:   types.OAUTH2,
 		Value:  "kscjlkjaslhclkjalkjlsjllk",
 		Params: nil,
 	}
@@ -28,8 +28,8 @@ func TestSerToken(t *testing.T) {
 
 	tt := strutil.ToString(tmp["type"])
 	if tt != "" {
-		ot := &oauth2.Token{
-			Type:   oauth2.TokenType(tt),
+		ot := &types.Token{
+			Type:   types.TokenType(tt),
 			Value:  strings.TrimSpace(strutil.ToString(tmp["value"])),
 			Params: toMap(tmp["params"], nil),
 		}
@@ -53,7 +53,7 @@ func TestArray(t *testing.T) {
 
 func TestDecode(t *testing.T) {
 	var dst []byte
-	println(string(oauth2.OAUTH2))
+	println(string(types.OAUTH2))
 
 	pairs := securecookie.CodecsFromPairs([]byte("WWtkT05BPT0"))
 	cookieValue := "MTY5MzUzODc1MXxOd3dBTkZkWFZESlBTRUZJVGs5SVZVUTNRa3BFU1ROQ1ZVUlRUVWRSUzFGVFZqVktVVmRIVmt3MU16WTNUa1JMVkU5WVRrSkRTbEU9fGK9JOUKqZfTCqybibIgkaxAGQlvTdvnv0O1aQ784l-M"

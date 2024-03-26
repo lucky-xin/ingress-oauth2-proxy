@@ -11,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/r"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/sign"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
 	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
@@ -45,8 +47,8 @@ type OAuth2Svc struct {
 	RedisCli              redis.UniversalClient
 	TokenResolver         *OAuth2ProxyTokenResolver
 	State                 State
-	Checker               oauth2.Checker
-	TokenKey              oauth2.TokenKey
+	Checker               types.Checker
+	TokenKey              types.TokenKey
 }
 
 func Create() (*OAuth2Svc, error) {
@@ -55,13 +57,13 @@ func Create() (*OAuth2Svc, error) {
 		return nil, err
 	}
 	resolver := NewTokenResolver(client)
-	confSvc := oauth2.NewRestEncryptionInfSvc("http://127.0.0.1:4000/oauth2/encryption-conf/app-id")
-	checker, err := oauth2.NewChecker(
+	confSvc := sign.NewRestEncryptionInfSvc("http://127.0.0.1:4000/oauth2/encryption-conf/app-id")
+	checker, err := authz.NewChecker(
 		resolver,
-		oauth2.RestTokenKey,
-		map[oauth2.TokenType]oauth2.Checker{
-			oauth2.OAUTH2: oauth2.NewTokenChecker([]string{"HS512"}, resolver),
-			oauth2.SIGN:   oauth2.NewSignChecker(confSvc, resolver),
+		authz.RestTokenKey,
+		map[types.TokenType]types.Checker{
+			types.OAUTH2: authz.NewTokenChecker([]string{"HS512"}, resolver),
+			types.SIGN:   authz.NewSignChecker(confSvc, resolver),
 		},
 	)
 	if err != nil {
@@ -88,7 +90,7 @@ func Create() (*OAuth2Svc, error) {
 		TokenResolver:         resolver,
 		SessionDomain:         env.GetString("OAUTH2_SESSION_DOMAIN", ".xyz.com"),
 		Checker:               checker,
-		TokenKey:              oauth2.RestTokenKey,
+		TokenKey:              authz.RestTokenKey,
 	}
 
 	auth2Svc.State = CreateStateRedis(client, time.Minute*5, auth2Svc.RedirectUriParamName)
@@ -205,7 +207,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		panic(err)
 		return
 	}
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token.AccessToken}
+	t := &types.Token{Type: types.OAUTH2, Value: token.AccessToken}
 	key, err := svc.TokenKey()
 	if err != nil {
 		log.Println("invalid access token")
@@ -230,8 +232,8 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 
 func (svc *OAuth2Svc) CreateSession(
 	c *gin.Context,
-	t *oauth2.Token,
-	claims *oauth2.XyzClaims) error {
+	t *types.Token,
+	claims *types.XyzClaims) error {
 	sess := sessions.Default(c)
 	log.Println("session id:" + sess.ID())
 	expire := claims.ExpiresAt.Second() - claims.IssuedAt.Second()

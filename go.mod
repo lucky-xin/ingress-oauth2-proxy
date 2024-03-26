@@ -9,7 +9,7 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/gorilla/sessions v1.2.2
 	github.com/lucky-xin/xyz-common-go v1.0.1
-	github.com/lucky-xin/xyz-common-oauth2-go v1.0.7
+	github.com/lucky-xin/xyz-common-oauth2-go v1.0.8
 	github.com/redis/go-redis/v9 v9.5.1
 )
 

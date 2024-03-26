@@ -133,7 +133,7 @@ spec:
                   number: 80
 ---
 
-# Usage demo, sample app
+# Usage demo, samples app
 apiVersion: apps/v1
 kind: Deployment
 metadata:

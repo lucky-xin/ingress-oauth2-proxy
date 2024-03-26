@@ -8,7 +8,10 @@ import (
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/r"
 	aescbc "github.com/lucky-xin/xyz-common-go/security/aes.cbc"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/utils"
 	"io"
 	"log"
 	"net/http"
@@ -17,10 +20,10 @@ import (
 )
 
 type InMemoryEncryptionInfSvc struct {
-	confs map[string]*oauth2.EncryptionInf
+	confs map[string]*types.EncryptionInf
 }
 
-func (svc *InMemoryEncryptionInfSvc) GetEncryptionInf(appId string) (*oauth2.EncryptionInf, error) {
+func (svc *InMemoryEncryptionInfSvc) GetEncryptionInf(appId string) (*types.EncryptionInf, error) {
 	inf := svc.confs[appId]
 	if inf == nil {
 		return nil, errors.New("not found config,app id:" + appId)
@@ -29,7 +32,7 @@ func (svc *InMemoryEncryptionInfSvc) GetEncryptionInf(appId string) (*oauth2.Enc
 }
 
 func TestOAUth2SvrTest(t *testing.T) {
-	confs := map[string]*oauth2.EncryptionInf{
+	confs := map[string]*types.EncryptionInf{
 		"9c607513b605406497afc395b0xyz": {
 			AppId:     "9c607513b605406497afc395b0xyz",
 			AppSecret: "MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEAl3.lcx.xyz",
@@ -51,13 +54,13 @@ func TestOAUth2SvrTest(t *testing.T) {
 
 	gin.SetMode(env.GetString("GIN_MODE", gin.DebugMode))
 	engine := gin.New()
-	tokenResolver := oauth2.NewDefaultTokenResolver("authz", []oauth2.TokenType{oauth2.SIGN})
-	checker, err := oauth2.NewChecker(
+	tokenResolver := resolver.NewDefaultTokenResolver("authz", []types.TokenType{types.SIGN})
+	checker, err := authz.NewChecker(
 		tokenResolver,
-		oauth2.RestTokenKey,
-		map[oauth2.TokenType]oauth2.Checker{
-			oauth2.OAUTH2: oauth2.NewTokenChecker([]string{"HS512"}, tokenResolver),
-			oauth2.SIGN:   oauth2.NewSignChecker(confSvc, tokenResolver),
+		authz.RestTokenKey,
+		map[types.TokenType]types.Checker{
+			types.OAUTH2: authz.NewTokenChecker([]string{"HS512"}, tokenResolver),
+			types.SIGN:   authz.NewSignChecker(confSvc, tokenResolver),
 		},
 	)
 	if err != nil {
@@ -110,7 +113,7 @@ func TestOAUth2SvrTest(t *testing.T) {
 			c.JSON(http.StatusOK, r.Failed(err.Error()))
 			return
 		}
-		claims := &oauth2.XyzClaims{
+		claims := &types.XyzClaims{
 			Username: user.Username,
 			UserId:   1,
 			TenantId: 1,
@@ -121,7 +124,7 @@ func TestOAUth2SvrTest(t *testing.T) {
 				Subject:   "xyz.com",
 			},
 		}
-		token, err := oauth2.CreateToken([]byte(tk), claims)
+		token, err := utils.CreateToken([]byte(tk), claims)
 		if err != nil {
 			c.JSON(http.StatusOK, r.Failed(err.Error()))
 			return

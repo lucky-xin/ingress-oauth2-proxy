@@ -6,7 +6,9 @@ import (
 	"github.com/lucky-xin/xyz-common-go/r"
 	aescbc "github.com/lucky-xin/xyz-common-go/security/aes.cbc"
 	"github.com/lucky-xin/xyz-common-go/sign"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
+	resolver2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
 	"io"
 	"net/http"
 	"testing"
@@ -99,15 +101,15 @@ func TestOAUth2CliTest(tet *testing.T) {
 	println("access token ->", tokenResp.Data().AccessToken)
 
 	// 解析token
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: tokenResp.Data().AccessToken}
+	t := &types.Token{Type: types.OAUTH2, Value: tokenResp.Data().AccessToken}
 
-	resolver := oauth2.NewDefaultTokenResolver("oauthz", []oauth2.TokenType{oauth2.OAUTH2})
-	checker, err := oauth2.NewChecker(
+	resolver := resolver2.NewDefaultTokenResolver("oauthz", []types.TokenType{types.OAUTH2})
+	checker, err := authz.NewChecker(
 		resolver,
-		oauth2.RestTokenKey,
-		map[oauth2.TokenType]oauth2.Checker{
-			oauth2.OAUTH2: oauth2.NewTokenChecker([]string{"HS512"}, resolver),
-			oauth2.SIGN:   oauth2.NewRestSignChecker("http://127.0.0.1:6666/oauth2/encryption-conf/app-id", resolver),
+		authz.RestTokenKey,
+		map[types.TokenType]types.Checker{
+			types.OAUTH2: authz.NewTokenChecker([]string{"HS512"}, resolver),
+			types.SIGN:   authz.NewRestSignChecker("http://127.0.0.1:6666/oauth2/encryption-conf/app-id", resolver),
 		},
 	)
 	if err != nil {

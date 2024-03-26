@@ -25,14 +25,13 @@
 
 ### 环境变量配置
 
-| 名称                     | 描述                                                                | 必填 | 默认值                                    |
-|------------------------|-------------------------------------------------------------------|----|----------------------------------------
-| `OAUTH2_TOKEN_KEY`     | JWT解析Key，可通过环境变量直接配置，如果没有配置则配置`OAUTH2_TOKEN_KEY_URL`，通过Rest API获取 | 否  |                                        |
-| `OAUTH2_TOKEN_KEY_URL` | 获取JWT解析Key服务URL                                                   | 否  | http://127.0.0.1:6666/oauth2/token-key |
-| `APP_ID`               | 获取JWT解析Key，数字签名校验App Id                                           | 否  |                                        |
-| `APP_SECRET`           | 获取JWT解析Key，数字签名校验App Secret                                       | 否  |                                        |
-| `AES_KEY`              | 获取JWT解析Key，AES Key用于解析返回加密Key                                     | 否  |                                        |
-| `AES_IV`               | 获取JWT解析Key，AES Iv用于解析返回加密Key                                      | 否  |                                        |
+| 名称                       | 描述                                      | 必填 | 默认值                                      |
+|--------------------------|-----------------------------------------|----|------------------------------------------
+| `OAUTH2_CHECK_TOKEN_URL` | 校验token服务URL                            | 是  | http://127.0.0.1:6666/oauth2/check-token |
+| `OAUTH2_CLIENT_ID`       | 校验token请求ClientId，用于生成Basic认证           | 是  |                                          |
+| `OAUTH2_CLIENT_SECRET`   | 校验token请求ClientSecret，用于生成Basic认证       | 是  |                                          |
+| `OAUTH2_RESP_CLAIMS_KEY` | 校验token返回结果，claims所在的路径（JSONPath），默认根路径 | 否  | /                                        |
+
 ### 1. k8s部署OAuth2代理认证服务OAuth2-Proxy
 
 configmap配置文件部署文件如下：
@@ -162,6 +161,7 @@ spec:
 --------------------------------
 
 ### 2. 配置认证ingress
+
 配置示例如下：
 
 ```yaml

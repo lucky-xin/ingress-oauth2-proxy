@@ -5,7 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/utils"
 	"testing"
 	"time"
 )
@@ -79,7 +81,7 @@ func AESDecrypt(key, val []byte) ([]byte, error) {
 
 func TestExtractToken(test *testing.T) {
 	tk := "eyJraWQiOiJmY2Y2MDE4Ny0wOGE0LTQ4NGUtOTVmMS0wNzdhNDUzZWU3NjIiLCJhbGciOiJIUzUxMiJ9"
-	claims := &oauth2.XyzClaims{
+	claims := &types.XyzClaims{
 		Username: "chaoxin.lu",
 		UserId:   1,
 		TenantId: 1,
@@ -90,13 +92,13 @@ func TestExtractToken(test *testing.T) {
 			Subject:   "xyz.com",
 		},
 	}
-	token, err := oauth2.CreateToken([]byte(tk), claims)
+	token, err := utils.CreateToken([]byte(tk), claims)
 	if err != nil {
 		panic(err)
 	}
 	println(token)
-	checker := oauth2.NewDefaultChecker()
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token}
+	checker := authz.NewDefaultChecker()
+	t := &types.Token{Type: types.OAUTH2, Value: token}
 	deClaims, err := checker.Check([]byte(tk), t)
 	if err != nil {
 		panic(err)
