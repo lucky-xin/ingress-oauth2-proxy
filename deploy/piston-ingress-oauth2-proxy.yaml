@@ -1,0 +1,248 @@
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: xyz-oauth2
+  labels:
+    kubernetes.io/metadata.name: xyz-oauth2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  labels:
+    app.xyz.com/instance: oauth2-proxy
+    app.xyz.com/name: oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.xyz.com/instance: oauth2-proxy
+      app.xyz.com/name: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app.xyz.com/instance: oauth2-proxy
+        app.xyz.com/name: oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: gzv-reg.xyz.com/library/auth/oauth2-proxy:v1.2.0
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: oauth2-proxy-config
+            - secretRef:
+                name: oauth2-proxy-secret
+          ports:
+            - name: http-port
+              containerPort: 6666
+          livenessProbe:
+            tcpSocket:
+              port: http-port
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: http-port
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 5
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: oauth2-proxy-secret
+stringData:
+  REDIS_TYPE: "cluster"
+  REDIS_NODES: "redis-access.xyz-bigdata.svc.cluster.local:6379"
+  REDIS_USER: ""
+  REDIS_PWD: "Y21WYVhNdGMzaFkycw"
+  REDIS_DB: "3"
+  REDIS_CLI_NAME: "ingress-oauth2-proxy"
+  OAUTH2_SCOPE: "read"
+  OAUTH2_GRANT_TYPE: "password"
+  OAUTH2_CLIENT_ID: "xxx"
+  OAUTH2_CLIENT_SECRET: "xxx"
+  APP_ID: "xxx"
+  APP_SECRET: "xxx"
+  AES_KEY: "xxx"
+  AES_IV: "xxx"
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: oauth2-proxy-config
+data:
+  GIN_MODE: "release"
+  OAUTH2_ACCESS_TOKEN_ENDPOINT: "http://it-auth.dev-xyz-cloud.svc.cluster.local:21080/oauth2/token"
+  OAUTH2_AUTHORIZATION_ENDPOINT: "https://d-it-auth.gzv-k8s.xyz.com/oauth2/authorize"
+  OAUTH2_PROXY_ENDPOINT: "https://d-it-auth-proxy.gzv-k8s.xyz.com"
+  OAUTH2_REDIRECT_URI_PARAM_NAME: "ru"
+  SERVER_PORT: "6666"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  labels:
+    app.xyz.com/instance: oauth2-proxy
+    app.xyz.com/name: oauth2-proxy
+spec:
+  type: ClusterIP
+  selector:
+    app.xyz.com/instance: oauth2-proxy
+    app.xyz.com/name: oauth2-proxy
+  ports:
+    - name: oauth2-proxy
+      protocol: TCP
+      port: 80
+      targetPort: 6666
+---
+kind: Ingress
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: oauth2-proxy
+  annotations:
+    # IMPORTANT - azure gives us really big cookies which wont fit into default ingress configs
+    # -----------------------------------------------------------------------------------------
+    # Fix for: WARNING: Multiple cookies are required for this session as it exceeds the 4kb cookie limit. Please use server side session storage (eg. Redis) instead.
+    # Which leads to: Error redeeming code during OAuth2 callback: token exchange failed: oauth2: cannot fetch token: 400 Bad Request
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "8k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+spec:
+  ingressClassName: nginx-ing
+  tls:
+    - hosts:
+        - d-it-auth-proxy.gzv-k8s.xyz.com
+      secretName: gzv-k8s
+  rules:
+    - host: d-it-auth-proxy.gzv-k8s.xyz.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy
+                port:
+                  number: 80
+---
+
+# Usage demo, sample app
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-demo
+  labels:
+    app.xyz.com/instance: nginx-demo
+    app.xyz.com/name: nginx-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.xyz.com/instance: nginx-demo
+      app.xyz.com/name: nginx-demo
+  template:
+    metadata:
+      labels:
+        app.xyz.com/instance: nginx-demo
+        app.xyz.com/name: nginx-demo
+    spec:
+      containers:
+        - name: nginx-demo
+          image: nginx:alpine
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-demo
+spec:
+  type: ClusterIP
+  selector:
+    app.xyz.com/instance: nginx-demo
+    app.xyz.com/name: nginx-demo
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx-demo
+  annotations:
+    # https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-configuration/annotations.md#external-authentication
+    nginx.ingress.kubernetes.io/auth-cache-duration: "200 201 202 30m"
+    nginx.ingress.kubernetes.io/auth-cache-key: $remote_user$http_authorization
+    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.xyz-oauth2.svc.cluster.local:80/check"
+    nginx.ingress.kubernetes.io/auth-signin: "https://d-it-auth-proxy.gzv-k8s.xyz.com/login"
+    nginx.ingress.kubernetes.io/auth-response-headers: Authorization,X-Auth-Request-User-Id,X-Auth-Request-User-Name
+    nginx.ingress.kubernetes.io/auth-signin-redirect-param: "ru"
+    nginx.ingress.kubernetes.io/auth-keepalive-share-vars: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: https://*.xyz.com
+    nginx.ingress.kubernetes.io/enable-global-auth: "true"
+
+spec:
+  ingressClassName: nginx-ing
+  tls:
+    - hosts:
+        - d-it-nginx-demo.gzv-k8s.xyz.com
+      secretName: gzv-k8s
+  rules:
+    - host: d-it-nginx-demo.gzv-k8s.xyz.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nginx-demo
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: d-it-upms-demo
+  annotations:
+    # https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-configuration/annotations.md#external-authentication
+    nginx.ingress.kubernetes.io/auth-cache-duration: "401 15s, 200 201 202 5m"
+    nginx.ingress.kubernetes.io/enable-global-auth: "true"
+    nginx.ingress.kubernetes.io/auth-keepalive-share-vars: "true"
+    nginx.ingress.kubernetes.io/auth-cache-key: "$remote_user"
+    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.oauth2-proxy.svc.cluster.local:80/check"
+    nginx.ingress.kubernetes.io/auth-signin: "https://d-it-auth-proxy.gzv-k8s.xyz.com/login"
+    nginx.ingress.kubernetes.io/auth-response-headers: "Authorization,X-Auth-Request-User-Id,X-Auth-Request-User-Name"
+    nginx.ingress.kubernetes.io/auth-signin-redirect-param: "ru"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://*.xyz.com"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+spec:
+  ingressClassName: nginx-ing
+  tls:
+    - hosts:
+        - d-it-upms-demo.gzv-k8s.xyz.com
+      secretName: gzv-k8s
+  rules:
+    - host: d-it-upms-demo.gzv-k8s.xyz.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: it-upms
+                port:
+                  number: 21080
+---
