@@ -1,4 +1,4 @@
-package xyz
+package svc
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func InitRedis() (redis.UniversalClient, error) {
+func CreateRedis() (redis.UniversalClient, error) {
 	rt := env.GetString("REDIS_TYPE", "single")
 	nodes := env.GetStringArray("REDIS_NODES", []string{"gzv-dev-redis-1.xyz.com:6379"})
 	user := env.GetString("REDIS_USER", "")

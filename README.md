@@ -12,25 +12,29 @@
 
 ### 环境变量配置
 
-| 名称                     | 描述                                                                | 必填 | 默认值                                    |
-|------------------------|-------------------------------------------------------------------|----|----------------------------------------
-| `OAUTH2_TOKEN_KEY`     | JWT解析Key，可通过环境变量直接配置，如果没有配置则配置`OAUTH2_TOKEN_KEY_URL`，通过Rest API获取 | 否  |                                        |
-| `OAUTH2_TOKEN_KEY_URL` | 获取JWT解析Key服务URL                                                   | 否  | http://127.0.0.1:6666/oauth2/token-key |
-| `APP_ID`               | 获取JWT解析Key，数字签名校验App Id                                           | 否  |                                        |
-| `APP_SECRET`           | 获取JWT解析Key，数字签名校验App Secret                                       | 否  |                                        |
-| `AES_KEY`              | 获取JWT解析Key，AES Key用于解析返回加密Key                                     | 否  |                                        |
-| `AES_IV`               | 获取JWT解析Key，AES Iv用于解析返回加密Key                                      | 否  |                                        |
+| 名称                            | 描述                                                                | 必填 | 默认值                                          |
+|-------------------------------|-------------------------------------------------------------------|----|----------------------------------------------
+| `OAUTH2_TOKEN_KEY`            | JWT解析Key，可通过环境变量直接配置，如果没有配置则配置`OAUTH2_TOKEN_KEY_URL`，通过Rest API获取 | 否  |                                              |
+| `OAUTH2_TOKEN_KEY_URL`        | 获取JWT解析Key服务URL                                                   | 否  | http://127.0.0.1:6666/oauth2/token-key       |
+| `OAUTH2_TOKEN_KEY_JP`         | 获取JWT解析Key，请求返回key所在的JSONPath                                     | 否  | $.data.key                                   |
+| `OAUTH2_TOKEN_KEY_AES_KEY`    | 获取JWT解析Key，AES Key用于解析返回加密Key                                     | 否  |                                              |
+| `OAUTH2_TOKEN_KEY_AES_IV`     | 获取JWT解析Key，AES Iv用于解析返回加密Key                                      | 否  |                                              |
+| `OAUTH2_URI_PARAM_TOKEN_NAME` | 支持将token放到url参数之中的对应参数名称                                          | 否  | authz                                        |
+| `OAUTH2_APP_ID`               | 获取JWT解析Key，数字签名校验App Id                                           | 否  |                                              |
+| `OAUTH2_APP_SECRET`           | 获取JWT解析Key，数字签名校验App Secret                                       | 否  |                                              |
+| `OAUTH2_JWT_VALID_METHODS`    | 解析JWT校验算法                                                         | 否  | HS512,HS256                                  |
+| `OAUTH2_ENCRYPTION_CONF_URL`  | 获取密钥配置信息url                                                       | 否  | http://127.0.0.1:4000/oauth2/encryption-conf |
 
-#### 1.2 JWT token校验——远程服务校验token
+#### 1.2 数字签名token校验
 
 ### 环境变量配置
 
-| 名称                       | 描述                                      | 必填 | 默认值                                      |
-|--------------------------|-----------------------------------------|----|------------------------------------------
-| `OAUTH2_CHECK_TOKEN_URL` | 校验token服务URL                            | 是  | http://127.0.0.1:6666/oauth2/check-token |
-| `OAUTH2_CLIENT_ID`       | 校验token请求ClientId，用于生成Basic认证           | 是  |                                          |
-| `OAUTH2_CLIENT_SECRET`   | 校验token请求ClientSecret，用于生成Basic认证       | 是  |                                          |
-| `OAUTH2_RESP_CLAIMS_KEY` | 校验token返回结果，claims所在的路径（JSONPath），默认根路径 | 否  | /                                        |
+| 名称                           | 描述                    | 必填 | 默认值                                          |
+|------------------------------|-----------------------|----|----------------------------------------------
+| `OAUTH2_ENCRYPTION_CONF_URL` | 获取密钥配置信息url           | 是  | http://127.0.0.1:4000/oauth2/encryption-conf |
+| `OAUTH2_SIGN_METHOD`         | 数字签名算法                | 否  | HmacSHA256                                   |
+| `OAUTH2_APP_ID`              | 获取密钥配置信息签名的app id     | 是  |                                              |
+| `OAUTH2_APP_SECRET`          | 获取密钥配置信息签名的app secret | 是  |                                              |
 
 ### 1. k8s部署OAuth2代理认证服务OAuth2-Proxy
 
@@ -74,6 +78,7 @@ stringData:
   REDIS_DB: "3"
   # redis客户端名称，默认ingress-oauth2-proxy
   REDIS_CLI_NAME: "ingress-oauth2-proxy"
+
   # OAuth2 授权范围
   OAUTH2_SCOPE: "read"
   # OAuth2 客户端名称
@@ -88,43 +93,69 @@ stringData:
   AES_KEY: "anFSRDdMejFralRVVExxyzJFWmx2MUI4"
   # 当前app id 的aes iv
   AES_IV: "MVNxZmlxWjExMxyz"
+  # 获取JWT 解析key url
+  OAUTH2_TOKEN_KEY_URL: "http://it-auth.dev-xyz-cloud.svc.cluster.local:21080/oauth2/token-key"
+  # 获取JWT 解析key请求返回key对应的JSONPath
+  OAUTH2_TOKEN_KEY_JP: "$.data.key "
+  # 获取JWT 解析key请求返回key AES加密密钥
+  OAUTH2_TOKEN_KEY_AES_KEY: "eW1EbmNWdUs2YVRkU0VIRW5zbjZOTxyz"
+  # 获取JWT 解析key请求返回key AES加密密钥
+  OAUTH2_TOKEN_KEY_AES_IV: "QnhXeWRJRzF2ZktF"
+  # 当前应用 app id
+  OAUTH2_APP_ID: "xxxxxxxxxxxxxxxx"
+  # 当前应用 app secret
+  OAUTH2_APP_SECRET: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  # JWT解析后验证算法
+  OAUTH2_JWT_VALID_METHODS: "HS512,HS256"
+  # 支持URL传递token，对应参数名称
+  OAUTH2_URI_PARAM_TOKEN_NAME: "authz"
+  # 获取解密密钥url，如果配置了OAUTH2_TOKEN_KEY_AES_KEY和OAUTH2_TOKEN_KEY_AES_IV则不用配置
+  OAUTH2_ENCRYPTION_CONF_URL: "http://it-upms.dev-xyz-cloud.svc.cluster.local:21080/encryption-conf"
+  # 数字签名算法，获取token key和解密密钥使用的签名算法
+  OAUTH2_SIGN_METHOD: "HmacSHA256"
 ```
 
 代理认证服务部署配置文件如下：
 
 ```yaml
-kind: Deployment
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: xyz-oauth2
+  labels:
+    kubernetes.io/metadata.name: xyz-oauth2
+---
 apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: oauth2-proxy
   labels:
-    app.xyz.com/instance: oauth2-proxy
-    app.xyz.com/name: oauth2-proxy
+    app.lucky.xyz/instance: oauth2-proxy
+    app.lucky.xyz/name: oauth2-proxy
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.xyz.com/instance: oauth2-proxy
-      app.xyz.com/name: oauth2-proxy
+      app.lucky.xyz/instance: oauth2-proxy
+      app.lucky.xyz/name: oauth2-proxy
   template:
     metadata:
       labels:
-        app.xyz.com/instance: oauth2-proxy
-        app.xyz.com/name: oauth2-proxy
+        app.lucky.xyz/instance: oauth2-proxy
+        app.lucky.xyz/name: oauth2-proxy
     spec:
       containers:
         - name: oauth2-proxy
-          image: xyz.com/library/auth/oauth2-proxy:latest
-          ports:
-            - name: http-port
-              containerPort: 6666
-              protocol: TCP
+          image: gzv-reg.lucky.xyz/library/oauth2-proxy:latest
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: oauth2-proxy-config
             - secretRef:
                 name: oauth2-proxy-secret
-          resources: { }
+          ports:
+            - name: http-port
+              containerPort: 6666
           livenessProbe:
             tcpSocket:
               port: http-port
@@ -141,21 +172,24 @@ spec:
             periodSeconds: 10
             successThreshold: 1
             failureThreshold: 5
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-          imagePullPolicy: Always
-      restartPolicy: Always
-      terminationGracePeriodSeconds: 30
-      dnsPolicy: ClusterFirst
-      securityContext: { }
-      schedulerName: default-scheduler
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 25%
-      maxSurge: 25%
-  revisionHistoryLimit: 10
-  progressDeadlineSeconds: 600
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  labels:
+    app.lucky.xyz/instance: oauth2-proxy
+    app.lucky.xyz/name: oauth2-proxy
+spec:
+  type: ClusterIP
+  selector:
+    app.lucky.xyz/instance: oauth2-proxy
+    app.lucky.xyz/name: oauth2-proxy
+  ports:
+    - name: oauth2-proxy
+      protocol: TCP
+      port: 80
+      targetPort: 6666
 ```
 
 --------------------------------
@@ -244,4 +278,6 @@ spec:
                   number: 5601
 ```
 
+![访问资源服务](./.img/access-resource-svr-login.png)
+![申请用户授权](./.img/oauth2-consent.png)
 

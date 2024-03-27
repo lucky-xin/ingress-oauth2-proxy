@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/lucky-xin/ingress-oauth2-proxy/src/oauth2/xyz"
-	"github.com/lucky-xin/ingress-oauth2-proxy/src/session"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/session"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/svc"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"log"
 	"net/http"
@@ -27,7 +28,7 @@ func errHandler(c *gin.Context) {
 	c.Next()
 }
 func main() {
-	auth2Svc, err := xyz.Create()
+	auth2Svc, err := svc.Create()
 	if err != nil {
 		panic(err)
 	}
@@ -41,7 +42,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	engine.Use(errHandler, sessions.Sessions(xyz.SessionName, store))
+	engine.Use(errHandler, sessions.Sessions(oauth2.SessionName, store))
 	// 加载静态资源
 	engine.StaticFS("/static", http.Dir("./static"))
 	// 加载模板文件

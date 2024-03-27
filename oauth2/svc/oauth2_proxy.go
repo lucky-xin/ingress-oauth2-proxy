@@ -1,19 +1,25 @@
-package xyz
+package svc
 
 import (
 	"bytes"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	poauth2 "github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/resolver"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/state"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/r"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/sign"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/jwt"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/signature"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf/rest"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
 	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
@@ -25,7 +31,6 @@ import (
 
 // (demo)[https://mac-blog.org.ua/kubernetes-oauth2-proxy/]
 var (
-	SessionName      = "oauth2_proxy"
 	sessUserInfoName = "_principal_"
 	httpClient       = &http.Client{
 		Transport: &http.Transport{
@@ -37,7 +42,7 @@ var (
 type OAuth2Svc struct {
 	ClientId              string
 	Scope                 string
-	AuthorizationHeader   string
+	BasicAuthzHeader      string
 	AccessTokenEndpoint   string
 	LogoutEndpoint        string
 	AuthorizationEndpoint string
@@ -45,76 +50,74 @@ type OAuth2Svc struct {
 	RedirectUriParamName  string
 	SessionDomain         string
 	RedisCli              redis.UniversalClient
-	TokenResolver         *OAuth2ProxyTokenResolver
-	State                 State
-	Checker               types.Checker
-	TokenKey              types.TokenKey
+	TokenResolver         *resolver.Resolver
+	State                 *state.State
+	Checker               authz.Checker
+	TokenKey              authz.TokenKey
 }
 
 func Create() (*OAuth2Svc, error) {
-	client, err := InitRedis()
+	client, err := CreateRedis()
 	if err != nil {
 		return nil, err
 	}
-	resolver := NewTokenResolver(client)
-	confSvc := sign.NewRestEncryptionInfSvc("http://127.0.0.1:4000/oauth2/encryption-conf/app-id")
-	checker, err := authz.NewChecker(
-		resolver,
-		authz.RestTokenKey,
-		map[types.TokenType]types.Checker{
-			types.OAUTH2: authz.NewTokenChecker([]string{"HS512"}, resolver),
-			types.SIGN:   authz.NewSignChecker(confSvc, resolver),
+	tokenResolver := resolver.Create(client)
+	restTokenKey := key.Create(rest.CreateWithEnv(), 6*time.Hour)
+	expireMs := env.GetInt64("OAUTH2_ENCRYPTION_CONF_CACHE_EXPIRE_SECONDS", 6*time.Hour.Milliseconds())
+	cleanupMs := env.GetInt64("OAUTH2_ENCRYPTION_CONF_CACHE_CLEANUP_SECONDS", 6*time.Hour.Milliseconds())
+	checker, err := wrapper.Create(
+		tokenResolver,
+		restTokenKey,
+		map[oauth2.TokenType]authz.Checker{
+			oauth2.OAUTH2: jwt.CreateWithEnv(),
+			oauth2.SIGN: signature.CreateWithRest(
+				env.GetString("OAUTH2_SIGN_ENCRYPTION_CONF_URL", "http://127.0.0.1:4000/oauth2/encryption-conf"),
+				time.Duration(expireMs)*time.Millisecond,
+				time.Duration(cleanupMs)*time.Millisecond,
+				tokenResolver,
+			),
 		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	clientId := os.Getenv("OAUTH2_CLIENT_ID")
-	accessTokenEndpoint := env.GetString("OAUTH2_ACCESS_TOKEN_ENDPOINT", "https://d-it-auth.gzv-k8s.xyz.com/oauth2/token")
+	accessTokenEndpoint := env.GetString("OAUTH2_ACCESS_TOKEN_ENDPOINT", "https://d-it-auth.gzv-k8s.xyz.com/oauth/token")
 	authorizationEndpoint := env.GetString("OAUTH2_AUTHORIZATION_ENDPOINT", "https://d-it-auth.gzv-k8s.xyz.com/oauth2/authorize")
 	logoutEndpoint := env.GetString("OAUTH2_LOGOUT_ENDPOINT", "https://d-it-auth.gzv-k8s.xyz.com/oauth2/logout")
 	oauth2ProxyEndpoint := env.GetString("OAUTH2_PROXY_ENDPOINT", "http://127.0.0.1:80")
-	stringToSign := clientId + ":" + os.Getenv("OAUTH2_CLIENT_SECRET")
-	signature := "Basic " + base64.StdEncoding.EncodeToString([]byte(stringToSign))
-
+	basicAuth := oauth2.CreateBasicAuth(clientId, os.Getenv("OAUTH2_CLIENT_SECRET"))
 	auth2Svc := &OAuth2Svc{
 		AccessTokenEndpoint:   accessTokenEndpoint,
 		AuthorizationEndpoint: authorizationEndpoint,
 		LogoutEndpoint:        logoutEndpoint,
 		Scope:                 os.Getenv("OAUTH2_SCOPE"),
-		AuthorizationHeader:   signature,
+		BasicAuthzHeader:      basicAuth,
 		ClientId:              clientId,
 		RedisCli:              client,
 		LoginCallbackUrl:      fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
 		RedirectUriParamName:  env.GetString("OAUTH2_REDIRECT_URI_PARAM_NAME", "ru"),
-		TokenResolver:         resolver,
+		TokenResolver:         tokenResolver,
 		SessionDomain:         env.GetString("OAUTH2_SESSION_DOMAIN", ".xyz.com"),
 		Checker:               checker,
-		TokenKey:              authz.RestTokenKey,
+		TokenKey:              restTokenKey,
 	}
 
-	auth2Svc.State = CreateStateRedis(client, time.Minute*5, auth2Svc.RedirectUriParamName)
+	auth2Svc.State = state.Create(client, time.Minute*5, auth2Svc.RedirectUriParamName)
 	return auth2Svc, nil
 }
 
 // ExchangeByCode get access token by code
-func (svc *OAuth2Svc) ExchangeByCode(code, redirectUri string) (token *TokenInf, err error) {
-	reqBody := map[string]interface{}{
-		"scope":        svc.Scope,
-		"grant_type":   "authorization_code",
-		"redirect_uri": redirectUri,
-		"code":         code,
-	}
-	jsonBytes, err := json.Marshal(reqBody)
+func (svc *OAuth2Svc) ExchangeByCode(code, redirectUri string) (token *poauth2.TokenInf, err error) {
+	//http://localhost:3000/oauth/token?scope=openapi&grant_type=authorization_code&
+	//redirect_uri=http://192.168.1.103:6666/callback&code=xxx
+	url := fmt.Sprintf(`%s?scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s`,
+		svc.AccessTokenEndpoint, svc.Scope, redirectUri, code)
+	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", svc.AccessTokenEndpoint, bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", svc.AuthorizationHeader)
+	req.Header.Set("Authorization", svc.BasicAuthzHeader)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -129,7 +132,7 @@ func (svc *OAuth2Svc) ExchangeByCode(code, redirectUri string) (token *TokenInf,
 	if err != nil {
 		return nil, err
 	}
-	var tokenResp *TokenResp
+	var tokenResp *poauth2.TokenResp
 	err = json.Unmarshal(body, &tokenResp)
 	if err != nil {
 		return nil, err
@@ -147,13 +150,13 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
-	key, err := svc.TokenKey()
+	tk, err := svc.TokenKey.Get()
 	if err != nil {
-		log.Println("invalid access token")
+		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
-	claims, err := svc.Checker.CheckWithContext(key, c)
+	claims, err := svc.Checker.CheckWithContext(tk, c)
 	if err != nil {
 		log.Println("invalid access token")
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
@@ -181,14 +184,14 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 		panic("not found redirect uri in request in param name:" + svc.RedirectUriParamName)
 		return
 	}
-	state, err := svc.State.Create(c)
+	s, err := svc.State.Create(c)
 	if err != nil {
-		log.Println("login handler, unable create state: " + err.Error())
+		log.Println("login handler, unable create s: " + err.Error())
 		panic(err)
 		return
 	}
 	redirectUri = fmt.Sprintf("%s?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
-		svc.AuthorizationEndpoint, svc.ClientId, svc.Scope, state, svc.LoginCallbackUrl)
+		svc.AuthorizationEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackUrl)
 	log.Println("login handler, redirecting to: " + redirectUri)
 	c.Redirect(http.StatusMovedPermanently, redirectUri)
 }
@@ -207,14 +210,14 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		panic(err)
 		return
 	}
-	t := &types.Token{Type: types.OAUTH2, Value: token.AccessToken}
-	key, err := svc.TokenKey()
+	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token.AccessToken}
+	tk, err := svc.TokenKey.Get()
 	if err != nil {
-		log.Println("invalid access token")
+		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
-	details, err := svc.Checker.Check(key, t)
+	details, err := svc.Checker.Check(tk, t)
 	if err != nil {
 		log.Println("decode token err: " + err.Error())
 		panic(err)
@@ -232,8 +235,8 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 
 func (svc *OAuth2Svc) CreateSession(
 	c *gin.Context,
-	t *types.Token,
-	claims *types.XyzClaims) error {
+	t *oauth2.Token,
+	claims *oauth2.XyzClaims) error {
 	sess := sessions.Default(c)
 	log.Println("session id:" + sess.ID())
 	expire := claims.ExpiresAt.Second() - claims.IssuedAt.Second()

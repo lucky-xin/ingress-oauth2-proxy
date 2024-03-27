@@ -1,13 +1,15 @@
 # 打包依赖阶段使用golang作为基础镜像
-FROM golang:latest as builder
+FROM golang:1.21 as builder
 
 USER root
 
 WORKDIR /app
+ENV GO111MODULE=on \
+    GOPROXY=https://goproxy.cn,direct
 
 COPY . .
 
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags musl -ldflags="-w -s" main.go
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-w -s" main.go
 
 # 运行阶段指定alpine作为基础镜像
 FROM alpine

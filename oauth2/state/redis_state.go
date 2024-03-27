@@ -1,4 +1,4 @@
-package xyz
+package state
 
 import (
 	"context"
@@ -6,34 +6,35 @@ import (
 	"encoding/base64"
 	"errors"
 	"github.com/gin-gonic/gin"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
 	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
 	"time"
 )
 
-type StateRedis struct {
+type State struct {
 	RedisCli     redis.UniversalClient
 	UriParamName string
 	Expire       time.Duration
 }
 
-func CreateStateRedis(
+func Create(
 	cli redis.UniversalClient,
 	expire time.Duration,
-	rup string) *StateRedis {
-	return &StateRedis{
+	rup string) *State {
+	return &State{
 		RedisCli:     cli,
 		UriParamName: rup,
 		Expire:       expire,
 	}
 }
 
-func (svc *StateRedis) Key(state string) string {
+func (svc *State) Key(state string) string {
 	return "oauth2_proxy:state:" + state
 }
 
-func (svc *StateRedis) Create(c *gin.Context) (s string, err error) {
+func (svc *State) Create(c *gin.Context) (s string, err error) {
 	ru := c.Query(svc.UriParamName)
 	if ru == "" {
 		return "", errors.New("not found redirect uri in query param:" + svc.UriParamName)
@@ -47,20 +48,20 @@ func (svc *StateRedis) Create(c *gin.Context) (s string, err error) {
 	return state, ex.Err()
 }
 
-func (svc *StateRedis) Get(c *gin.Context) (*StateInf, error) {
+func (svc *State) Get(c *gin.Context) (*oauth2.StateInf, error) {
 	state := c.Query("state")
 	log.Println("StateRedis query state[" + state + "]")
 	ru, err := svc.RedisCli.Get(context.Background(), svc.Key(state)).Result()
 	if err != nil {
 		return nil, err
 	}
-	return &StateInf{Value: state, RedirectUri: ru}, nil
+	return &oauth2.StateInf{Value: state, RedirectUri: ru}, nil
 }
 
-func (svc *StateRedis) Expiration() time.Duration {
+func (svc *State) Expiration() time.Duration {
 	return svc.Expire
 }
 
-func (svc *StateRedis) RedirectUriParamName() string {
+func (svc *State) RedirectUriParamName() string {
 	return svc.UriParamName
 }

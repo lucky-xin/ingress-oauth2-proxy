@@ -6,12 +6,18 @@ import (
 	"github.com/lucky-xin/xyz-common-go/r"
 	aescbc "github.com/lucky-xin/xyz-common-go/security/aes.cbc"
 	"github.com/lucky-xin/xyz-common-go/sign"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
+	xjwt "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/jwt"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/signature"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf/rest"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
 	resolver2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/types"
 	"io"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestOAUth2CliTest(tet *testing.T) {
@@ -101,15 +107,21 @@ func TestOAUth2CliTest(tet *testing.T) {
 	println("access token ->", tokenResp.Data().AccessToken)
 
 	// 解析token
-	t := &types.Token{Type: types.OAUTH2, Value: tokenResp.Data().AccessToken}
+	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: tokenResp.Data().AccessToken}
 
-	resolver := resolver2.NewDefaultTokenResolver("oauthz", []types.TokenType{types.OAUTH2})
-	checker, err := authz.NewChecker(
+	resolver := resolver2.Create("oauthz", []oauth2.TokenType{oauth2.OAUTH2})
+	restTokenKey := key.Create(rest.CreateWithEnv(), 6*time.Hour)
+	checker, err := wrapper.Create(
 		resolver,
-		authz.RestTokenKey,
-		map[types.TokenType]types.Checker{
-			types.OAUTH2: authz.NewTokenChecker([]string{"HS512"}, resolver),
-			types.SIGN:   authz.NewRestSignChecker("http://127.0.0.1:6666/oauth2/encryption-conf/app-id", resolver),
+		restTokenKey,
+		map[oauth2.TokenType]authz.Checker{
+			oauth2.OAUTH2: xjwt.Create([]string{"HS512"}, resolver),
+			oauth2.SIGN: signature.CreateWithRest(
+				"http://127.0.0.1:6666/oauth2/encryption-conf/app-id",
+				time.Hour*6,
+				time.Hour*6,
+				resolver,
+			),
 		},
 	)
 	if err != nil {
@@ -121,4 +133,6 @@ func TestOAUth2CliTest(tet *testing.T) {
 	}
 	println(deClaims.UserId)
 	println(deClaims.Username)
+	auth := oauth2.CreateBasicAuth("piston", "lskcjakjck")
+	println(auth)
 }

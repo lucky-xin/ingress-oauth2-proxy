@@ -1,4 +1,4 @@
-package xyz
+package session
 
 import (
 	"crypto/rand"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
 	"io"
 	"log"
 	"net/http"
@@ -16,13 +17,13 @@ var (
 	stateFieldName = "state"
 )
 
-type StateSession struct {
+type Session struct {
 	SessionDomain string
 	UriParamName  string
 	Expire        time.Duration
 }
 
-func (svc *StateSession) Create(c *gin.Context) (string, error) {
+func (svc *Session) Create(c *gin.Context) (string, error) {
 	sess := sessions.Default(c)
 	log.Println("create session id:" + sess.ID())
 	b := make([]byte, 32)
@@ -45,7 +46,7 @@ func (svc *StateSession) Create(c *gin.Context) (string, error) {
 	return state, sess.Save()
 }
 
-func (svc *StateSession) Get(c *gin.Context) (*StateInf, error) {
+func (svc *Session) Get(c *gin.Context) (*oauth2.StateInf, error) {
 	state := c.Query("state")
 	sess := sessions.Default(c)
 	val := sess.Get(stateFieldName)
@@ -56,16 +57,16 @@ func (svc *StateSession) Get(c *gin.Context) (*StateInf, error) {
 	case map[string]interface{}:
 		cache := val.(map[string]interface{})
 		if state == cache["value"] {
-			return &StateInf{Value: cache["value"].(string), RedirectUri: cache[svc.UriParamName].(string)}, nil
+			return &oauth2.StateInf{Value: cache["value"].(string), RedirectUri: cache[svc.UriParamName].(string)}, nil
 		}
 	}
 
 	return nil, errors.New("not found state in session")
 }
-func (svc *StateSession) Expiration() time.Duration {
+func (svc *Session) Expiration() time.Duration {
 	return svc.Expire
 }
 
-func (svc *StateSession) RedirectUriParamName() string {
+func (svc *Session) RedirectUriParamName() string {
 	return svc.UriParamName
 }

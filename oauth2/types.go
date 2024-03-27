@@ -1,8 +1,12 @@
-package xyz
+package oauth2
 
 import (
 	"github.com/gin-gonic/gin"
 	"time"
+)
+
+var (
+	SessionName = "oauth2_proxy"
 )
 
 type TokenResp struct {
