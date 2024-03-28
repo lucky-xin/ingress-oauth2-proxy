@@ -70,3 +70,7 @@ func (svc *Session) Expiration() time.Duration {
 func (svc *Session) RedirectUriParamName() string {
 	return svc.UriParamName
 }
+
+func TokenKey(suffix string) string {
+	return "session_token:" + suffix
+}
