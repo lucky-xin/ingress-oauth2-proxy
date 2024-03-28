@@ -22,11 +22,17 @@
 
 --------------------------------
 
-### 1.JWT token校验
+## 使用
+### 1.构建镜像
+```shell
+docker build f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:latest .
+```
 
-#### 1.1 JWT token校验——本地解析token
+### 2.token校验配置
 
-### 环境变量配置
+#### 2.1 JWT token校验——本地解析token
+
+##### 环境变量配置
 
 | 名称                            | 描述                                                                | 必填 | 默认值                                          |
 |-------------------------------|-------------------------------------------------------------------|----|----------------------------------------------
@@ -41,9 +47,9 @@
 | `OAUTH2_JWT_VALID_METHODS`    | 解析JWT校验算法                                                         | 否  | HS512,HS256                                  |
 | `OAUTH2_ENCRYPTION_CONF_URL`  | 获取密钥配置信息url                                                       | 否  | http://127.0.0.1:4000/oauth2/encryption-conf |
 
-#### 1.2 数字签名token校验
+#### 2.2 数字签名token校验
 
-### 环境变量配置
+##### 环境变量配置
 
 | 名称                           | 描述                    | 必填 | 默认值                                          |
 |------------------------------|-----------------------|----|----------------------------------------------
@@ -52,10 +58,9 @@
 | `OAUTH2_APP_ID`              | 获取密钥配置信息签名的app id     | 是  |                                              |
 | `OAUTH2_APP_SECRET`          | 获取密钥配置信息签名的app secret | 是  |                                              |
 
-### 1. k8s部署OAuth2代理认证服务OAuth2-Proxy
+### 3. k8s部署OAuth2代理认证服务OAuth2-Proxy
 
 configmap配置文件部署文件如下：
-
 ```yaml
 kind: ConfigMap
 apiVersion: v1
@@ -75,7 +80,6 @@ data:
 ```
 
 secret配置文件部署文件如下：
-
 ```yaml
 kind: Secret
 apiVersion: v1
@@ -131,7 +135,7 @@ stringData:
   OAUTH2_SIGN_METHOD: "HmacSHA256"
 ```
 
-代理认证服务部署配置文件如下：
+### 代理认证服务部署配置
 
 ```yaml
 kind: Namespace
@@ -210,7 +214,7 @@ spec:
 
 --------------------------------
 
-### 2. 配置认证ingress
+### 4. 统一认证代理配置
 
 配置示例如下：
 
@@ -253,50 +257,4 @@ spec:
                 port:
                   number: 21080
 ```
-
-```yaml
-kind: Ingress
-apiVersion: networking.k8s.io/v1
-metadata:
-  name: d-it-kibana-demo
-  annotations:
-    # 代理认证服务登录地址 [代理认证服务地址]/login
-    nginx.ingress.kubernetes.io/auth-signin: https://d-it-auth-proxy.gzv-k8s.xyz.com/login
-    # 代理认证服务校验token地址 [代理认证服务地址]/check
-    nginx.ingress.kubernetes.io/auth-url: http://oauth2-proxy.xyz-oauth2.svc.cluster.local:80/check
-    # cookie跨域domain
-    nginx.ingress.kubernetes.io/cors-allow-origin: https://*.xyz.com
-    # 对代理认证服务返回缓存，认证成功时状态码为200 200 202 缓存30分钟
-    nginx.ingress.kubernetes.io/auth-cache-duration: 200 201 202 30m
-    nginx.ingress.kubernetes.io/auth-cache-key: $remote_user$http_authorization
-    nginx.ingress.kubernetes.io/auth-keepalive-share-vars: 'true'
-    nginx.ingress.kubernetes.io/auth-response-headers: Authorization,X-Auth-Request-User-Id,X-Auth-Request-User-Name
-    nginx.ingress.kubernetes.io/auth-signin-redirect-param: ru
-    nginx.ingress.kubernetes.io/cors-allow-credentials: 'true'
-    nginx.ingress.kubernetes.io/enable-cors: 'true'
-    nginx.ingress.kubernetes.io/enable-global-auth: 'true'
-spec:
-  ingressClassName: nginx-ing
-  tls:
-    - hosts:
-        - kiba-oauth2-proxy.gzv-k8s.xyz.com
-      secretName: gzv-k8s
-  rules:
-    - host: kiba-oauth2-proxy.gzv-k8s.xyz.com.gzv-k8s.xyz.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: kibana-kibana
-                port:
-                  number: 5601
-```
-
-### 
-
-## 用户授权之后，再次尝试获取授权码
-
-## 因为已经登录，成功
 
