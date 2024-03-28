@@ -37,12 +37,12 @@ func main() {
 	engine.Group("/health").GET("", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
 	})
+	// 基于redis的session配置
 	sessionKeyPairs := env.GetString("OAUTH2_SESSION_KEY_PAIRS", "WWtkT05BPT0")
 	store, err := session.NewRedisStore(auth2Svc.RedisCli, "session:ingress_oauth2_proxy:", []byte(sessionKeyPairs))
 	if err != nil {
 		panic(err)
 	}
-	// 基于redis的session配置
 	engine.Use(errHandler, sessions.Sessions(oauth2.SessionName, store))
 	// 加载静态资源
 	engine.StaticFS("/static", http.Dir("./static"))
@@ -53,15 +53,22 @@ func main() {
 			"title": "404",
 		})
 	})
+	// ingress-oauth2-proxy token校验API，每次请求都会进行拦截，验证当前session是否有验证信息
 	engine.GET("/check", func(c *gin.Context) {
 		auth2Svc.Check(c)
-	}).GET("/login", func(c *gin.Context) {
-		auth2Svc.Login(c)
-	}).GET("/callback", func(c *gin.Context) {
-		auth2Svc.Callback(c)
-	}).GET("/logout", func(c *gin.Context) {
-		auth2Svc.Logout(c)
-	})
+	}).
+		// 登录API
+		GET("/login", func(c *gin.Context) {
+			auth2Svc.Login(c)
+		}).
+		// OAuth2 authorize endpoint回调API
+		GET("/callback", func(c *gin.Context) {
+			auth2Svc.Callback(c)
+		}).
+		// 登出API
+		GET("/logout", func(c *gin.Context) {
+			auth2Svc.Logout(c)
+		})
 
 	errc := make(chan error)
 	restPort := env.GetString("SERVER_PORT", "6666")
