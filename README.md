@@ -4,6 +4,7 @@
 ![实现思路](.img/parse-jwt-with-key.png)
 
 ## 认证流程
+
 > 1.访问资源服务https://d-it-upms-demo-3.gzv-k8s.xyz.com/user/1
 > ![访问资源服务](./.img/access-resource-svr.png)
 > 2.OAuth2-Proxy校验Session认证信息，因为没有相关认证信息，跳转到授权访问认证地址`nginx.ingress.kubernetes.io/auth-signin`进行授权访问
@@ -34,29 +35,29 @@ docker build f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:latest
 
 ##### 环境变量配置
 
-| 名称                            | 描述                                                                | 必填 | 默认值                                          |
-|-------------------------------|-------------------------------------------------------------------|----|----------------------------------------------
-| `OAUTH2_TOKEN_KEY`            | JWT解析Key，可通过环境变量直接配置，如果没有配置则配置`OAUTH2_TOKEN_KEY_URL`，通过Rest API获取 | 否  |                                              |
-| `OAUTH2_TOKEN_KEY_URL`        | 获取JWT解析Key服务URL                                                   | 否  | http://127.0.0.1:6666/oauth2/token-key       |
-| `OAUTH2_TOKEN_KEY_JP`         | 获取JWT解析Key，请求返回key所在的JSONPath                                     | 否  | $.data.key                                   |
-| `OAUTH2_TOKEN_KEY_AES_KEY`    | 获取JWT解析Key，AES Key用于解析返回加密Key                                     | 否  |                                              |
-| `OAUTH2_TOKEN_KEY_AES_IV`     | 获取JWT解析Key，AES Iv用于解析返回加密Key                                      | 否  |                                              |
-| `OAUTH2_URI_PARAM_TOKEN_NAME` | 支持将token放到url参数之中的对应参数名称                                          | 否  | authz                                        |
-| `OAUTH2_APP_ID`               | 获取JWT解析Key，数字签名校验App Id                                           | 否  |                                              |
-| `OAUTH2_APP_SECRET`           | 获取JWT解析Key，数字签名校验App Secret                                       | 否  |                                              |
-| `OAUTH2_JWT_VALID_METHODS`    | 解析JWT校验算法                                                         | 否  | HS512,HS256                                  |
-| `OAUTH2_ENCRYPTION_CONF_URL`  | 获取密钥配置信息url                                                       | 否  | http://127.0.0.1:4000/oauth2/encryption-conf |
+| 名称                                | 描述                                                                     | 必填 | 默认值                                          |
+|-----------------------------------|------------------------------------------------------------------------|----|----------------------------------------------
+| `OAUTH2_TOKEN_KEY`                | JWT解析Key，可通过环境变量直接配置，如果没有配置则配置`OAUTH2_TOKEN_KEY_ENDPOINT`，通过Rest API获取 | 否  |                                              |
+| `OAUTH2_TOKEN_KEY_ENDPOINT`       | 获取JWT解析Key服务URL                                                        | 否  | http://127.0.0.1:6666/oauth2/token-key       |
+| `OAUTH2_TOKEN_KEY_JP`             | 获取JWT解析Key，请求返回key所在的JSONPath                                          | 否  | $.data.key                                   |
+| `OAUTH2_TOKEN_KEY_AES_KEY`        | 获取JWT解析Key，AES Key用于解析返回加密Key                                          | 否  |                                              |
+| `OAUTH2_TOKEN_KEY_AES_IV`         | 获取JWT解析Key，AES Iv用于解析返回加密Key                                           | 否  |                                              |
+| `OAUTH2_URI_PARAM_TOKEN_NAME`     | 支持将token放到url参数之中的对应参数名称                                               | 否  | authz                                        |
+| `OAUTH2_APP_ID`                   | 获取JWT解析Key，数字签名校验App Id                                                | 否  |                                              |
+| `OAUTH2_APP_SECRET`               | 获取JWT解析Key，数字签名校验App Secret                                            | 否  |                                              |
+| `OAUTH2_JWT_VALID_METHODS`        | 解析JWT校验算法                                                              | 否  | HS512,HS256                                  |
+| `OAUTH2_ENCRYPTION_CONF_ENDPOINT` | 获取密钥配置信息url                                                            | 否  | http://127.0.0.1:4000/oauth2/encryption-conf |
 
 #### 2.2 数字签名token校验
 
 ##### 环境变量配置
 
-| 名称                           | 描述                    | 必填 | 默认值                                          |
-|------------------------------|-----------------------|----|----------------------------------------------
-| `OAUTH2_ENCRYPTION_CONF_URL` | 获取密钥配置信息url           | 是  | http://127.0.0.1:4000/oauth2/encryption-conf |
-| `OAUTH2_SIGN_METHOD`         | 数字签名算法                | 否  | HmacSHA256                                   |
-| `OAUTH2_APP_ID`              | 获取密钥配置信息签名的app id     | 是  |                                              |
-| `OAUTH2_APP_SECRET`          | 获取密钥配置信息签名的app secret | 是  |                                              |
+| 名称                                | 描述                    | 必填 | 默认值                                          |
+|-----------------------------------|-----------------------|----|----------------------------------------------
+| `OAUTH2_ENCRYPTION_CONF_ENDPOINT` | 获取密钥配置信息url           | 是  | http://127.0.0.1:4000/oauth2/encryption-conf |
+| `OAUTH2_SIGN_METHOD`              | 数字签名算法                | 否  | HmacSHA256                                   |
+| `OAUTH2_APP_ID`                   | 获取密钥配置信息签名的app id     | 是  |                                              |
+| `OAUTH2_APP_SECRET`               | 获取密钥配置信息签名的app secret | 是  |                                              |
 
 #### 2.3 Redis Session配置
 

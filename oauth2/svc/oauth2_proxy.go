@@ -71,7 +71,7 @@ func Create() (*OAuth2Svc, error) {
 		map[oauth2.TokenType]authz.Checker{
 			oauth2.OAUTH2: jwt.CreateWithEnv(),
 			oauth2.SIGN: signature.CreateWithRest(
-				env.GetString("OAUTH2_ENCRYPTION_CONF_URL", "http://127.0.0.1:4000/oauth2/encryption-conf"),
+				env.GetString("OAUTH2_ENCRYPTION_CONF_ENDPOINT", "http://127.0.0.1:4000/oauth2/encryption-conf"),
 				time.Duration(expireMs)*time.Millisecond,
 				time.Duration(cleanupMs)*time.Millisecond,
 				tokenResolver,
