@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/base32"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/gorilla/securecookie"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	xjwt "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/jwt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -79,6 +82,8 @@ func AESDecrypt(key, val []byte) ([]byte, error) {
 }
 
 func TestExtractToken(test *testing.T) {
+	key := strings.TrimRight(base32.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(32)), "=")
+	println(key)
 	tk := "eyJraWQiOiJmY2Y2MDE4Ny0wOGE0LTQ4NGUtOTVmMS0wNzdhNDUzZWU3NjIiLCJhbGciOiJIUzUxMiJ9"
 	claims := &oauth2.XyzClaims{
 		Username: "chaoxin.lu",

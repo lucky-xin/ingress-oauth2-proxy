@@ -1,14 +1,30 @@
-# Ingress Oauth2 Proxy
+# Ingress 统一认证代理
 
-## Getting started
+## 基于OAuth2 authorize endpoint实现
+![实现思路](.img/parse-jwt-with-key.png)
+
+## 认证流程
+> 1.访问资源服务https://d-it-upms-demo-3.gzv-k8s.piston.ink/user/1
+> ![访问资源服务](./.img/access-resource-svr.png)
+> 2.OAuth2-Proxy校验Session认证信息，因为没有相关认证信息，跳转到授权访问认证地址`nginx.ingress.kubernetes.io/auth-signin`进行授权访问
+>
+> 3.登录![登录](./.img/access-resource-svr-req-login.png)
+> 4.登录成功，访问OAuth2服务（OAuth2 authorize endpoint ）申请用户授权访问
+> ![申请用户授权](./.img/oauth2-consent.png)
+> 5.用户授权访问，访问OAuth2服务（OAuth2 authorize endpoint ）获取授权码
+> ![img.png](./.img/oauth2-code-req-code.png)
+> 6.获取到授权码成功，访问OAuth2服务将访问转发到redirect_uri（OAuth2 Proxy回调接口），OAuth2 Proxy根据code获取access token，并新建认证session
+> 
+> 7.获取最开始的访问地址（根据state获取），并将访问转发到该地址
+> 
+> 8.此时能正常访问
+> ![img.png](./.img/access.png)
 
 --------------------------------
 
 ### 1.JWT token校验
 
 #### 1.1 JWT token校验——本地解析token
-
-![实现思路](.img/parse-jwt-with-key.png)
 
 ### 环境变量配置
 
@@ -80,7 +96,7 @@ stringData:
   REDIS_CLI_NAME: "ingress-oauth2-proxy"
 
   # OAuth2 授权范围
-  OAUTH2_SCOPE: "read"
+  OAUTH2_SCOPE: "openapi"
   # OAuth2 客户端名称
   OAUTH2_CLIENT_ID: "lcx"
   # OAuth2 客户端密码
@@ -278,6 +294,9 @@ spec:
                   number: 5601
 ```
 
-![访问资源服务](./.img/access-resource-svr-login.png)
-![申请用户授权](./.img/oauth2-consent.png)
+### 
+
+## 用户授权之后，再次尝试获取授权码
+
+## 因为已经登录，成功
 

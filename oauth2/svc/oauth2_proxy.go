@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -26,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -71,7 +71,7 @@ func Create() (*OAuth2Svc, error) {
 		map[oauth2.TokenType]authz.Checker{
 			oauth2.OAUTH2: jwt.CreateWithEnv(),
 			oauth2.SIGN: signature.CreateWithRest(
-				env.GetString("OAUTH2_SIGN_ENCRYPTION_CONF_URL", "http://127.0.0.1:4000/oauth2/encryption-conf"),
+				env.GetString("OAUTH2_ENCRYPTION_CONF_URL", "http://127.0.0.1:4000/oauth2/encryption-conf"),
 				time.Duration(expireMs)*time.Millisecond,
 				time.Duration(cleanupMs)*time.Millisecond,
 				tokenResolver,
@@ -109,15 +109,15 @@ func Create() (*OAuth2Svc, error) {
 
 // ExchangeByCode get access token by code
 func (svc *OAuth2Svc) ExchangeByCode(code, redirectUri string) (token *poauth2.TokenInf, err error) {
-	//http://localhost:3000/oauth/token?scope=openapi&grant_type=authorization_code&
-	//redirect_uri=http://192.168.1.103:6666/callback&code=xxx
-	url := fmt.Sprintf(`%s?scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s`,
-		svc.AccessTokenEndpoint, svc.Scope, redirectUri, code)
-	req, err := http.NewRequest("POST", url, nil)
+	// http:127.0.0.1:3000/oauth/token?scope=read&grant_type=authorization_code&redirect_uri=https://www.pistonidata.com&code=
+	reader := strings.NewReader(fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
+		svc.Scope, redirectUri, code))
+	req, err := http.NewRequest("POST", svc.AccessTokenEndpoint, reader)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", svc.BasicAuthzHeader)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -132,15 +132,12 @@ func (svc *OAuth2Svc) ExchangeByCode(code, redirectUri string) (token *poauth2.T
 	if err != nil {
 		return nil, err
 	}
-	var tokenResp *poauth2.TokenResp
+	var tokenResp *poauth2.TokenInf
 	err = json.Unmarshal(body, &tokenResp)
 	if err != nil {
 		return nil, err
 	}
-	if tokenResp.Code != 1 {
-		return nil, errors.New(tokenResp.Msg)
-	}
-	return &tokenResp.Data, nil
+	return tokenResp, nil
 }
 
 func (svc *OAuth2Svc) Check(c *gin.Context) {
@@ -229,36 +226,37 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		panic(err)
 		return
 	}
-	log.Println("callback handler, redirecting to: " + stateInf.RedirectUri)
+	log.Println("callback handle succeed, redirecting to: " + stateInf.RedirectUri)
 	c.Redirect(http.StatusMovedPermanently, stateInf.RedirectUri)
 }
 
 func (svc *OAuth2Svc) CreateSession(
 	c *gin.Context,
 	t *oauth2.Token,
-	claims *oauth2.XyzClaims) error {
-	sess := sessions.Default(c)
-	log.Println("session id:" + sess.ID())
-	expire := claims.ExpiresAt.Second() - claims.IssuedAt.Second()
-	sess.Options(sessions.Options{
+	claims *oauth2.XyzClaims) (err error) {
+	session := sessions.Default(c)
+	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+	log.Println("Create session id:", session.ID(), "--expire:", expire)
+	session.Options(sessions.Options{
 		Domain:   svc.SessionDomain,
 		Path:     "/",
-		MaxAge:   expire,
+		MaxAge:   int(expire.Seconds()),
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteNoneMode,
 	})
-	sess.Set(sessUserInfoName, map[string]interface{}{
+	session.Set(sessUserInfoName, map[string]interface{}{
 		"uid":   claims.UserId,
 		"uname": claims.Username,
 		"tid":   claims.TenantId,
 	})
-	err := svc.TokenResolver.Save(c, t, time.Second*time.Duration(expire))
+	err = svc.TokenResolver.Save(c, t, expire)
 	if err != nil {
-		return err
+		return
 	}
-
-	return sess.Save()
+	err = session.Save()
+	log.Println("Created session id:", session.ID())
+	return
 }
 
 func (svc *OAuth2Svc) Logout(c *gin.Context) {

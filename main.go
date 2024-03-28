@@ -42,6 +42,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	// 基于redis的session配置
 	engine.Use(errHandler, sessions.Sessions(oauth2.SessionName, store))
 	// 加载静态资源
 	engine.StaticFS("/static", http.Dir("./static"))
