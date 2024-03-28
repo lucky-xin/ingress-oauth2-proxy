@@ -4,7 +4,7 @@
 ![实现思路](.img/parse-jwt-with-key.png)
 
 ## 认证流程
-> 1.访问资源服务https://d-it-upms-demo-3.gzv-k8s.piston.ink/user/1
+> 1.访问资源服务https://d-it-upms-demo-3.gzv-k8s.xyz.com/user/1
 > ![访问资源服务](./.img/access-resource-svr.png)
 > 2.OAuth2-Proxy校验Session认证信息，因为没有相关认证信息，跳转到授权访问认证地址`nginx.ingress.kubernetes.io/auth-signin`进行授权访问
 >
