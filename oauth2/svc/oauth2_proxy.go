@@ -194,8 +194,13 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 	// 新建State，并将redirectUri保存
 	s, err := svc.State.Create(c)
 	if err != nil {
-		log.Println("login handler, unable create s: " + err.Error())
+		log.Println("login handler, unable create state: " + err.Error())
 		panic(err)
+		return
+	}
+	_, err = svc.createSession(c, time.Minute*5, "state", s)
+	if err != nil {
+		log.Println("login handler, unable create session: " + err.Error())
 		return
 	}
 	// 将请求转发到OAuth2 authorize endpoint
@@ -254,25 +259,13 @@ func (svc *OAuth2Svc) CreateSession(
 	c *gin.Context,
 	t *oauth2.Token,
 	claims *oauth2.XyzClaims) (err error) {
-	ses := sessions.Default(c)
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
-	log.Println("Creating ses... id:", ses.ID())
-	ses.Options(sessions.Options{
-		Domain:   svc.SessionDomain,
-		Path:     "/",
-		MaxAge:   int(expire.Seconds()),
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
-	})
-
-	ses.Set(sessUserInfoName, map[string]interface{}{
+	// 必须先执行Session.Save()才能拿到Session id
+	ses, err := svc.createSession(c, expire, sessUserInfoName, map[string]interface{}{
 		"uid":   claims.UserId,
 		"tid":   claims.TenantId,
 		"uname": claims.Username,
 	})
-	// 必须先执行Session.Save()才能拿到Session id
-	err = ses.Save()
 	tokenKey := session.TokenKey(ses.ID())
 	result, err := svc.RedisCli.Exists(context.Background(), tokenKey).Result()
 	if result != 0 {
@@ -294,6 +287,28 @@ func (svc *OAuth2Svc) CreateSession(
 	if err != nil {
 		return
 	}
+	log.Println("Created ses id:", ses.ID())
+	return
+}
+
+func (svc *OAuth2Svc) createSession(
+	c *gin.Context,
+	expire time.Duration,
+	key interface{},
+	val interface{}) (ses sessions.Session, err error) {
+	ses = sessions.Default(c)
+	log.Println("Creating ses... id:", ses.ID())
+	ses.Options(sessions.Options{
+		Domain:   svc.SessionDomain,
+		Path:     "/",
+		MaxAge:   int(expire.Seconds()),
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
+	})
+	ses.Set(key, val)
+	// 必须先执行Session.Save()才能拿到Session id
+	err = ses.Save()
 	log.Println("Created ses id:", ses.ID())
 	return
 }
