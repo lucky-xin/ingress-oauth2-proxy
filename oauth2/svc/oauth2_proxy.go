@@ -133,8 +133,6 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		token := &oauth2.Token{}
 		err := svc.RedisCli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Scan(token)
 		if err == nil {
-			byts, _ := json.Marshal(token)
-			log.Println("found cache...", string(byts))
 			// session 有认证信息直接返回
 			c.Header("X-Auth-Request-User-Id", strconv.FormatInt(token.Uid, 10))
 			c.Header("X-Auth-Request-User-Name", token.Uname)
@@ -197,7 +195,7 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, r.Failed("unable create state"))
 		return
 	}
-	_, err = svc.createSession(c, time.Second*10, sessStateName, s)
+	_, err = svc.createSession(c, time.Minute*3, sessStateName, s)
 	if err != nil {
 		log.Println("unable create session: " + err.Error())
 		c.JSON(http.StatusInternalServerError, r.Failed("unable create session"))
@@ -217,8 +215,10 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	// 获取session中State
 	ses := sessions.Default(c)
 	stateSession := ses.Get(sessStateName)
+	log.Println("session state", stateSession)
+	stat := c.Query(stateName)
 	b := err != nil
-	if b || stateRedis == nil || stateRedis.Value != stateSession {
+	if b || stateRedis == nil || stateRedis.Value != stat {
 		var msg string
 		if b {
 			msg = err.Error()
@@ -292,7 +292,6 @@ func (svc *OAuth2Svc) CreateSession(c *gin.Context, t *oauth2.Token, claims *oau
 	if err != nil {
 		return
 	}
-	log.Println("Created ses id:", ses.ID())
 	return
 }
 

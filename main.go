@@ -27,6 +27,7 @@ func errHandler(c *gin.Context) {
 	}()
 	c.Next()
 }
+
 func main() {
 	auth2Svc, err := svc.Create()
 	if err != nil {
