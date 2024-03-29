@@ -24,12 +24,18 @@
 --------------------------------
 
 ## 使用
-### 1.构建镜像
+## 1.获取镜像
+## 1.1使用已有镜像
+```shell
+docker pull xin8/oauth2-ingress-proxy:latest
+docker tag xin8/oauth2-ingress-proxy:latest gzv-reg.lucky.xyz/library/oauth2-proxy:latest
+```
+### 1.2构建镜像
 ```shell
 docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:latest .
 ```
 
-### 2.token校验配置
+### 2.token校验配置，使用JWT或者数字签名认证
 
 #### 2.1 JWT token校验——本地解析token
 
