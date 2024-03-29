@@ -31,6 +31,8 @@ import (
 
 var (
 	sessUserInfoName = "_principal_"
+	sessStateName    = "_state_"
+	stateName        = "state"
 	httpClient       = &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -100,13 +102,13 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 		svc.Scope, redirectUri, code))
 	req, err := http.NewRequest(http.MethodPost, svc.AccessTokenEndpoint, reader)
 	if err != nil {
-		return nil, err
+		return
 	}
 	req.Header.Set("Authorization", svc.BasicAuthzHeader)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -116,14 +118,10 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 	}(resp.Body)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return
 	}
-	var tokenResp *poauth2.TokenInf
-	err = json.Unmarshal(body, &tokenResp)
-	if err != nil {
-		return nil, err
-	}
-	return tokenResp, nil
+	err = json.Unmarshal(body, &token)
+	return
 }
 
 // Check 验证Context之中是否有验证信息，验证成功返回200状态码，否则返回400和其他状态码
@@ -188,19 +186,21 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 	// 获取原始访问地址
 	redirectUri := c.Query(svc.RedirectUriParamName)
 	if redirectUri == "" {
-		panic("not found redirect uri in request in param name:" + svc.RedirectUriParamName)
+		c.JSON(http.StatusInternalServerError,
+			r.Failed("not found redirect uri in request in param name:"+svc.RedirectUriParamName))
 		return
 	}
 	// 新建State，并将redirectUri保存
 	s, err := svc.State.Create(c)
 	if err != nil {
-		log.Println("login handler, unable create state: " + err.Error())
-		panic(err)
+		log.Println("unable create state: " + err.Error())
+		c.JSON(http.StatusInternalServerError, r.Failed("unable create state"))
 		return
 	}
-	_, err = svc.createSession(c, time.Minute*5, "state", s)
+	_, err = svc.createSession(c, time.Second*10, sessStateName, s)
 	if err != nil {
-		log.Println("login handler, unable create session: " + err.Error())
+		log.Println("unable create session: " + err.Error())
+		c.JSON(http.StatusInternalServerError, r.Failed("unable create session"))
 		return
 	}
 	// 将请求转发到OAuth2 authorize endpoint
@@ -212,11 +212,19 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 
 // Callback OAuth2 authorize endpoint认证成功回调接口
 func (svc *OAuth2Svc) Callback(c *gin.Context) {
-	// 从Redis之中获取State
-	stateInf, err := svc.State.Get(c)
-	if err != nil {
-		log.Println("unable to get state: " + err.Error())
-		c.JSON(http.StatusUnauthorized, r.Failed("not found state"))
+	// 获取Redis之中State
+	stateRedis, err := svc.State.Get(c)
+	// 获取session中State
+	ses := sessions.Default(c)
+	stateSession := ses.Get(sessStateName)
+	b := err != nil
+	if b || stateRedis == nil || stateRedis.Value != stateSession {
+		var msg string
+		if b {
+			msg = err.Error()
+		}
+		log.Println("invalid state: " + msg)
+		c.JSON(http.StatusUnauthorized, r.Failed("invalid state"))
 		return
 	}
 	// 根据code获取access token
@@ -250,15 +258,13 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
 		return
 	}
-	log.Println("callback handle succeed, redirecting to: " + stateInf.RedirectUri)
+	ses.Delete(sessStateName)
+	log.Println("callback handle succeed, redirecting to: " + stateRedis.RedirectUri)
 	// 将请求转发到原来的地址
-	c.Redirect(http.StatusMovedPermanently, stateInf.RedirectUri)
+	c.Redirect(http.StatusMovedPermanently, stateRedis.RedirectUri)
 }
 
-func (svc *OAuth2Svc) CreateSession(
-	c *gin.Context,
-	t *oauth2.Token,
-	claims *oauth2.XyzClaims) (err error) {
+func (svc *OAuth2Svc) CreateSession(c *gin.Context, t *oauth2.Token, claims *oauth2.XyzClaims) (err error) {
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
 	ses, err := svc.createSession(c, expire, sessUserInfoName, map[string]interface{}{
@@ -272,7 +278,6 @@ func (svc *OAuth2Svc) CreateSession(
 		return nil
 	}
 	// 不保存params信息
-	t.Params = nil
 	err = svc.RedisCli.HSet(context.Background(), tokenKey, map[string]interface{}{
 		"tid":   t.Tid,
 		"uid":   t.Uid,
@@ -291,11 +296,7 @@ func (svc *OAuth2Svc) CreateSession(
 	return
 }
 
-func (svc *OAuth2Svc) createSession(
-	c *gin.Context,
-	expire time.Duration,
-	key interface{},
-	val interface{}) (ses sessions.Session, err error) {
+func (svc *OAuth2Svc) createSession(c *gin.Context, expire time.Duration, key, val interface{}) (ses sessions.Session, err error) {
 	ses = sessions.Default(c)
 	log.Println("Creating ses... id:", ses.ID())
 	ses.Options(sessions.Options{

@@ -65,7 +65,7 @@ func (svc *State) Create(c *gin.Context) (s string, err error) {
 	if err != nil {
 		return
 	}
-	state := base64.RawURLEncoding.EncodeToString(buff.Bytes())
+	state := base64.StdEncoding.EncodeToString(buff.Bytes())
 	ex := svc.rcli.SetEx(context.Background(), svc.Key(state), ru, svc.Expiration())
 	return state, ex.Err()
 }
