@@ -63,7 +63,7 @@ func TestOAUth2CliTest(tet *testing.T) {
 	aesKey := "B31F2A75FBF94099B31F2A75FBF94099" // 此处16|24|32个字符
 	aesIv := "1234567890123456"
 	encryptor := aescbc.Encryptor{Key: aesKey, Iv: aesIv}
-	tk, err := encryptor.Decrypt(deTk)
+	tk, err := encryptor.DecryptBase64(deTk)
 	if err != nil {
 		panic(err)
 	}

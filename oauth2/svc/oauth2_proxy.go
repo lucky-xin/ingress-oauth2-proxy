@@ -13,7 +13,6 @@ import (
 	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/state"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/r"
-	"github.com/lucky-xin/xyz-common-go/strutil"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
@@ -30,7 +29,6 @@ import (
 	"time"
 )
 
-// (demo)[https://mac-blog.org.ua/kubernetes-oauth2-proxy/]
 var (
 	sessUserInfoName = "_principal_"
 	httpClient       = &http.Client{
@@ -88,17 +86,19 @@ func Create() (*OAuth2Svc, error) {
 		Checker:               checker,
 		TokenKey:              key.Create(rest.CreateWithEnv(), 6*time.Hour),
 	}
-	auth2Svc.State = state.Create(client, time.Minute*5, auth2Svc.RedirectUriParamName)
+
+	auth2Svc.State = state.Create(client, time.Minute*5, auth2Svc.RedirectUriParamName,
+		env.GetString("OAUTH2_STATE_SECRET", "EXr88Hc6VQiXxetsgO"))
 	return auth2Svc, nil
 }
 
-// ExchangeByCode get access token by code
-func (svc *OAuth2Svc) ExchangeByCode(code, redirectUri string) (token *poauth2.TokenInf, err error) {
+// ExchangeAccessTokenByCode get access token by code
+func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token *poauth2.TokenInf, err error) {
 	// http:127.0.0.1:3000/oauth/token?scope=read&grant_type=authorization_code&redirect_uri=
 	//https://www.pistonidata.com&code=
 	reader := strings.NewReader(fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
 		svc.Scope, redirectUri, code))
-	req, err := http.NewRequest("POST", svc.AccessTokenEndpoint, reader)
+	req, err := http.NewRequest(http.MethodPost, svc.AccessTokenEndpoint, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -131,19 +131,24 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	// 1.尝试从session之中获取认证信息
 	sess := sessions.Default(c)
 	log.Println("try get token from session, session id:" + sess.ID())
-	cache := svc.RedisCli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Val()
-	if cache != nil {
-		// session 有认证信息直接返回
-		c.Header("X-Auth-Request-User-Id", strutil.ToString(cache["uid"]))
-		c.Header("X-Auth-Request-User-Name", strutil.ToString(cache["uname"]))
-		c.Header("Authorization", strutil.ToString(cache["type"])+" "+strutil.ToString(cache["value"]))
-		c.JSON(http.StatusOK, r.Succeed("authenticated"))
-		return
+	if sess.ID() != "" {
+		token := &oauth2.Token{}
+		err := svc.RedisCli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Scan(token)
+		if err == nil {
+			byts, _ := json.Marshal(token)
+			log.Println("found cache...", string(byts))
+			// session 有认证信息直接返回
+			c.Header("X-Auth-Request-User-Id", strconv.FormatInt(token.Uid, 10))
+			c.Header("X-Auth-Request-User-Name", token.Uname)
+			c.Header("Authorization", string(token.Type)+" "+token.Value)
+			c.JSON(http.StatusOK, r.Succeed("authenticated"))
+			return
+		}
 	}
 
 	// 2.尝试从请求头，URL参数之中获取token
-	token := svc.TokenResolver.Resolve(c)
-	if token == nil {
+	token, err := svc.TokenResolver.Resolve(c)
+	if err != nil || token == nil {
 		log.Println("not found access token")
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
@@ -206,37 +211,38 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	stateInf, err := svc.State.Get(c)
 	if err != nil {
 		log.Println("unable to get state: " + err.Error())
-		panic(err)
+		c.JSON(http.StatusUnauthorized, r.Failed("not found state"))
 		return
 	}
 	// 根据code获取access token
 	code := c.Query("code")
-	token, err := svc.ExchangeByCode(code, svc.LoginCallbackUrl)
+	token, err := svc.ExchangeAccessTokenByCode(code, svc.LoginCallbackUrl)
 	if err != nil {
 		log.Println("unable to exchange code for access token: " + err.Error())
-		panic(err)
+		c.JSON(http.StatusUnauthorized, r.Failed("unable to exchange code for access token"))
 		return
 	}
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token.AccessToken}
+
 	// 获取JWT 解析key
 	tk, err := svc.TokenKey.Get()
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
-		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
+		c.JSON(http.StatusUnauthorized, r.Failed("get token key failed"))
 		return
 	}
 	// 解析token
+	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token.AccessToken}
 	details, err := svc.Checker.Check(tk, t)
 	if err != nil {
 		log.Println("decode token err: " + err.Error())
-		panic(err)
+		c.JSON(http.StatusUnauthorized, r.Failed("decode token failed"))
 		return
 	}
 	// 新建session，cookie并将认证信息存入session之中
 	err = svc.CreateSession(c, t, details)
 	if err != nil {
 		log.Println("callback handler, unable to save access token to session: " + err.Error())
-		panic(err)
+		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
 		return
 	}
 	log.Println("callback handle succeed, redirecting to: " + stateInf.RedirectUri)
@@ -259,66 +265,57 @@ func (svc *OAuth2Svc) CreateSession(
 		HttpOnly: true,
 		SameSite: http.SameSiteNoneMode,
 	})
-	err = svc.saveToken(c, t, expire)
+
+	ses.Set(sessUserInfoName, map[string]interface{}{
+		"uid":   claims.UserId,
+		"tid":   claims.TenantId,
+		"uname": claims.Username,
+	})
+	// 必须先执行Session.Save()才能拿到Session id
+	err = ses.Save()
+	tokenKey := session.TokenKey(ses.ID())
+	result, err := svc.RedisCli.Exists(context.Background(), tokenKey).Result()
+	if result != 0 {
+		return nil
+	}
+	// 不保存params信息
+	t.Params = nil
+	err = svc.RedisCli.HSet(context.Background(), tokenKey, map[string]interface{}{
+		"tid":   t.Tid,
+		"uid":   t.Uid,
+		"uname": t.Uname,
+		"type":  string(t.Type),
+		"value": t.Value,
+	}).Err()
+	if err != nil {
+		return err
+	}
+	err = svc.RedisCli.Expire(context.Background(), tokenKey, expire).Err()
 	if err != nil {
 		return
 	}
-	ses.Set(sessUserInfoName, map[string]interface{}{
-		"uid":   claims.UserId,
-		"uname": claims.Username,
-		"tid":   claims.TenantId,
-	})
-	err = ses.Save()
 	log.Println("Created ses id:", ses.ID())
 	return
 }
 
-func (svc *OAuth2Svc) saveToken(
-	c *gin.Context,
-	t *oauth2.Token,
-	expire time.Duration) error {
-	sess := sessions.Default(c)
-	tokenKey := session.TokenKey(sess.ID())
-	result := svc.RedisCli.Exists(context.Background(), tokenKey).Val()
-	if result != 0 {
-		return nil
-	}
-	values := map[string]string{
-		"type":  string(t.Type),
-		"value": t.Value,
-		"uid":   strconv.FormatInt(t.Uid, 10),
-		"uname": t.Uname,
-	}
-	if t.Params != nil {
-		marshal, err := json.Marshal(t.Params)
-		if err != nil {
-			return err
-		}
-		values["params"] = string(marshal)
-	}
-	err := svc.RedisCli.HMSet(context.Background(), tokenKey, values).Err()
-	if err != nil {
-		return err
-	}
-	return svc.RedisCli.Expire(context.Background(), tokenKey, expire).Err()
-}
-
 func (svc *OAuth2Svc) Logout(c *gin.Context) {
-	token := svc.TokenResolver.Resolve(c)
-	if token != nil {
-		req, err := http.NewRequest("DELETE", svc.AccessTokenEndpoint, bytes.NewBuffer(nil))
-		if err != nil {
-			panic(err)
-			return
-		}
-		req.Header.Set("Authorization", string(token.Type)+" "+token.Value)
-		_, err = httpClient.Do(req)
-		if err != nil {
-			panic(err)
-			return
-		}
+	token, err := svc.TokenResolver.Resolve(c)
+	if err != nil || token == nil {
+		c.JSON(http.StatusForbidden, r.Failed("not found access token"))
+		return
 	}
 
+	req, err := http.NewRequest(http.MethodDelete, svc.AccessTokenEndpoint, bytes.NewBuffer(nil))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, r.Failed("create delete request failed"))
+		return
+	}
+	req.Header.Set("Authorization", string(token.Type)+" "+token.Value)
+	_, err = httpClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, r.Failed("send delete request failed"))
+		return
+	}
 	sess := sessions.Default(c)
 	sess.Clear()
 

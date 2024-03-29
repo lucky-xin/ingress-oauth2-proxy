@@ -5,9 +5,7 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/session"
-	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/utils"
 	"github.com/lucky-xin/xyz-common-go/env"
-	"github.com/lucky-xin/xyz-common-go/strutil"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	xresolver "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
 	"github.com/redis/go-redis/v9"
@@ -25,24 +23,17 @@ func (d Resolver) UriParamTokenName() string {
 	return d.paramTokenName
 }
 
-func (d Resolver) Resolve(c *gin.Context) *oauth2.Token {
+func (d Resolver) Resolve(c *gin.Context) (t *oauth2.Token, err error) {
 	// 尝试从请求头，请求参数之中获取token
-	t := d.delegate.Resolve(c)
-	if t != nil {
-		return t
+	t, err = d.delegate.Resolve(c)
+	if err != nil {
+		return
 	}
 	// 从session之中获取token
 	sess := sessions.Default(c)
 	log.Println("try get token from session, session id:" + sess.ID())
-	cache := d.cli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Val()
-	if cache == nil {
-		return nil
-	}
-	return &oauth2.Token{
-		Type:   oauth2.TokenType(strutil.ToString(cache["type"])),
-		Value:  strutil.ToString(cache["value"]),
-		Params: utils.ToMap(cache["params"], nil),
-	}
+	err = d.cli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Scan(t)
+	return
 }
 
 func Create(cli redis.UniversalClient) *Resolver {

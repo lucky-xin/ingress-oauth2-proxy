@@ -79,7 +79,11 @@ func TestOAUth2SvrTest(t *testing.T) {
 	}
 	engine.GET("/oauth2/token-key", func(c *gin.Context) {
 		// 校验数字签名
-		reqToken := tokenResolver.Resolve(c)
+		reqToken, err := tokenResolver.Resolve(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, r.Failed(err.Error()))
+			return
+		}
 		if reqToken != nil {
 			_, err := checker.Check([]byte(tk), reqToken)
 			if err != nil {

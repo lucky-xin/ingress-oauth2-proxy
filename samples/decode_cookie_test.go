@@ -24,7 +24,7 @@ func TestSerToken(t *testing.T) {
 	_ = json.Unmarshal(b, &m)
 	println(m)
 
-	tmp := toMap(m, make(map[string]interface{}))
+	tmp := toMap(m, make(map[string]string))
 
 	tt := strutil.ToString(tmp["type"])
 	if tt != "" {
@@ -56,7 +56,7 @@ func TestDecode(t *testing.T) {
 	println(string(oauth2.OAUTH2))
 
 	pairs := securecookie.CodecsFromPairs([]byte("WWtkT05BPT0"))
-	cookieValue := "MTY5MzUzODc1MXxOd3dBTkZkWFZESlBTRUZJVGs5SVZVUTNRa3BFU1ROQ1ZVUlRUVWRSUzFGVFZqVktVVmRIVmt3MU16WTNUa1JMVkU5WVRrSkRTbEU9fGK9JOUKqZfTCqybibIgkaxAGQlvTdvnv0O1aQ784l-M"
+	cookieValue := "MTcxMTcwNDIxMnxOd3dBTkVsRE5rNUJURmxMUjFKYVFrTlNWazFTUVVsUU1rVlJVVkJTVGpaRVEwTlpTbEZKVGxSVk5VaEdVRkkwVjBKUlZsZ3pORUU9fEDN7FLYprBSdPl-_Shy0nOnepO7BfbSMilppkzgG-PR"
 	decodeString, _ := base64.RawURLEncoding.DecodeString(cookieValue)
 	err := securecookie.DecodeMulti(
 		"oauth2_proxy",
@@ -71,13 +71,13 @@ func TestDecode(t *testing.T) {
 
 }
 
-func toMap(val interface{}, defaultVal map[string]interface{}) map[string]interface{} {
+func toMap(val interface{}, defaultVal map[string]string) map[string]string {
 	if val == nil {
 		return defaultVal
 	}
 	kind := reflect.TypeOf(val).Kind()
 	if kind == reflect.Map {
-		return val.(map[string]interface{})
+		return val.(map[string]string)
 	}
 	return defaultVal
 }

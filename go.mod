@@ -1,6 +1,6 @@
 module github.com/lucky-xin/ingress-oauth2-proxy
 
-go 1.21.0
+go 1.22.1
 
 require (
 	github.com/gin-contrib/sessions v1.0.0
@@ -8,8 +8,8 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/gorilla/securecookie v1.1.2
 	github.com/gorilla/sessions v1.2.2
-	github.com/lucky-xin/xyz-common-go v1.0.1
-	github.com/lucky-xin/xyz-common-oauth2-go v1.0.20
+	github.com/lucky-xin/xyz-common-go v1.0.5
+	github.com/lucky-xin/xyz-common-oauth2-go v1.1.10
 	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852
 	github.com/redis/go-redis/v9 v9.5.1
 )

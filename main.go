@@ -19,7 +19,7 @@ func errHandler(c *gin.Context) {
 			//打印错误堆栈信息
 			msg, _ := fmt.Printf("%v", err)
 			log.Printf("panic: %v\n", err)
-			c.HTML(200, "500.html", gin.H{
+			c.HTML(http.StatusOK, "500.html", gin.H{
 				"title": "500",
 				"error": msg,
 			})
