@@ -26,7 +26,7 @@
 ## 使用
 ### 1.构建镜像
 ```shell
-docker build f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:latest .
+docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:latest .
 ```
 
 ### 2.token校验配置
