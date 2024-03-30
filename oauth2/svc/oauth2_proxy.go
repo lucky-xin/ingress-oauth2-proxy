@@ -157,7 +157,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 4.校验token
-	claims, err := svc.Checker.CheckWithContext(tk, c)
+	claims, err := svc.Checker.Check(tk, token)
 	if err != nil {
 		log.Println("invalid access token")
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
