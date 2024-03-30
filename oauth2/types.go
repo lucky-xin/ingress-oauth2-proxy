@@ -1,7 +1,9 @@
 package oauth2
 
 import (
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	xoauth2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"time"
 )
 
@@ -28,9 +30,14 @@ type StateInf struct {
 	RedirectUri string `json:"ru"`
 }
 
-type State interface {
-	Create(c *gin.Context) (string, error)
-	Get(c *gin.Context) (*StateInf, error)
-	Expiration() time.Duration
+type Session interface {
+	SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.XyzClaims) (err error)
+
+	CreateSession(c *gin.Context, expire time.Duration, key, val interface{}) (s sessions.Session, err error)
+
 	RedirectUriParamName() string
+
+	GetState(c *gin.Context) (*StateInf, error)
+
+	CreateState(c *gin.Context) (s string, err error)
 }
