@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	poauth2 "github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
 	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/session"
-	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/state"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/r"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
@@ -30,10 +29,7 @@ import (
 )
 
 var (
-	sessUserInfoName = "_principal_"
-	sessStateName    = "_state_"
-	stateName        = "state"
-	httpClient       = &http.Client{
+	httpClient = &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
@@ -53,7 +49,7 @@ type OAuth2Svc struct {
 	SessionDomain        string
 	RedisCli             redis.UniversalClient
 	TokenResolver        xresolver.TokenResolver
-	State                *state.State
+	Session              *session.Session
 	Checker              authz.Checker
 	TokenKey             authz.TokenKey
 }
@@ -72,7 +68,7 @@ func Create() (*OAuth2Svc, error) {
 	logoutEndpoint := env.GetString("OAUTH2_LOGOUT_ENDPOINT",
 		"https://d-it-auth.gzv-k8s.xyz.com/oauth2/logout")
 	oauth2ProxyEndpoint := env.GetString("OAUTH2_PROXY_ENDPOINT", "http://127.0.0.1:80")
-
+	ruParamName := env.GetString("OAUTH2_REDIRECT_URI_PARAM_NAME", "ru")
 	auth2Svc := &OAuth2Svc{
 		AccessTokenEndpoint:   accessTokenEndpoint,
 		AuthorizationEndpoint: authorizationEndpoint,
@@ -82,15 +78,18 @@ func Create() (*OAuth2Svc, error) {
 		ClientId:              clientId,
 		RedisCli:              client,
 		LoginCallbackUrl:      fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
-		RedirectUriParamName:  env.GetString("OAUTH2_REDIRECT_URI_PARAM_NAME", "ru"),
+		RedirectUriParamName:  ruParamName,
 		TokenResolver:         checker.GetTokenResolver(),
-		SessionDomain:         env.GetString("OAUTH2_SESSION_DOMAIN", ".xyz.com"),
 		Checker:               checker,
 		TokenKey:              key.Create(rest.CreateWithEnv(), 6*time.Hour),
 	}
 
-	auth2Svc.State = state.Create(client, time.Minute*5, auth2Svc.RedirectUriParamName,
-		env.GetString("OAUTH2_STATE_SECRET", "EXr88Hc6VQiXxetsgO"))
+	auth2Svc.Session = session.Create(
+		env.GetString("OAUTH2_SESSION_DOMAIN", ".xyz.com"),
+		ruParamName,
+		time.Duration(env.GetInt64("OAUTH2_SESSION_STATE_EXPIRE_MS", 3*time.Minute.Milliseconds()))*time.Millisecond,
+		client,
+	)
 	return auth2Svc, nil
 }
 
@@ -164,7 +163,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 5.新建session，cookie，并将认证结果存入session之中
-	err = svc.CreateSession(c, token, claims)
+	err = svc.Session.SaveAuthorization(c, token, claims)
 	if err != nil {
 		log.Println("cannot save session: ", err.Error())
 		c.JSON(http.StatusInternalServerError, r.Failed("unauthorized"))
@@ -189,16 +188,10 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 		return
 	}
 	// 新建State，并将redirectUri保存
-	s, err := svc.State.Create(c)
+	s, err := svc.Session.CreateState(c)
 	if err != nil {
 		log.Println("unable create state: " + err.Error())
 		c.JSON(http.StatusInternalServerError, r.Failed("unable create state"))
-		return
-	}
-	_, err = svc.createSession(c, time.Minute*3, sessStateName, s)
-	if err != nil {
-		log.Println("unable create session: " + err.Error())
-		c.JSON(http.StatusInternalServerError, r.Failed("unable create session"))
 		return
 	}
 	// 将请求转发到OAuth2 authorize endpoint
@@ -210,15 +203,10 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 
 // Callback OAuth2 authorize endpoint认证成功回调接口
 func (svc *OAuth2Svc) Callback(c *gin.Context) {
-	// 获取Redis之中State
-	stateRedis, err := svc.State.Get(c)
-	// 获取session中State
-	ses := sessions.Default(c)
-	stateSession := ses.Get(sessStateName)
-	log.Println("session state", stateSession)
-	stat := c.Query(stateName)
+	// 获取State
+	state, err := svc.Session.GetState(c)
 	b := err != nil
-	if b || stateRedis == nil || stateRedis.Value != stat {
+	if b || state == nil {
 		var msg string
 		if b {
 			msg = err.Error()
@@ -252,65 +240,15 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		return
 	}
 	// 新建session，cookie并将认证信息存入session之中
-	err = svc.CreateSession(c, t, details)
+	err = svc.Session.SaveAuthorization(c, t, details)
 	if err != nil {
 		log.Println("callback handler, unable to save access token to session: " + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
 		return
 	}
-	ses.Delete(sessStateName)
-	log.Println("callback handle succeed, redirecting to: " + stateRedis.RedirectUri)
+	log.Println("callback handle succeed, redirecting to: " + state.RedirectUri)
 	// 将请求转发到原来的地址
-	c.Redirect(http.StatusMovedPermanently, stateRedis.RedirectUri)
-}
-
-func (svc *OAuth2Svc) CreateSession(c *gin.Context, t *oauth2.Token, claims *oauth2.XyzClaims) (err error) {
-	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
-	// 必须先执行Session.Save()才能拿到Session id
-	ses, err := svc.createSession(c, expire, sessUserInfoName, map[string]interface{}{
-		"uid":   claims.UserId,
-		"tid":   claims.TenantId,
-		"uname": claims.Username,
-	})
-	tokenKey := session.TokenKey(ses.ID())
-	result, err := svc.RedisCli.Exists(context.Background(), tokenKey).Result()
-	if result != 0 {
-		return nil
-	}
-	// 不保存params信息
-	err = svc.RedisCli.HSet(context.Background(), tokenKey, map[string]interface{}{
-		"tid":   t.Tid,
-		"uid":   t.Uid,
-		"uname": t.Uname,
-		"type":  string(t.Type),
-		"value": t.Value,
-	}).Err()
-	if err != nil {
-		return err
-	}
-	err = svc.RedisCli.Expire(context.Background(), tokenKey, expire).Err()
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (svc *OAuth2Svc) createSession(c *gin.Context, expire time.Duration, key, val interface{}) (ses sessions.Session, err error) {
-	ses = sessions.Default(c)
-	log.Println("Creating ses... id:", ses.ID())
-	ses.Options(sessions.Options{
-		Domain:   svc.SessionDomain,
-		Path:     "/",
-		MaxAge:   int(expire.Seconds()),
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
-	})
-	ses.Set(key, val)
-	// 必须先执行Session.Save()才能拿到Session id
-	err = ses.Save()
-	log.Println("Created ses id:", ses.ID())
-	return
+	c.Redirect(http.StatusMovedPermanently, state.RedirectUri)
 }
 
 func (svc *OAuth2Svc) Logout(c *gin.Context) {
