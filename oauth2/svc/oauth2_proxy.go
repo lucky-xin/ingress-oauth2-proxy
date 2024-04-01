@@ -17,7 +17,6 @@ import (
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf/rest"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
-	xresolver "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
 	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
@@ -36,6 +35,8 @@ var (
 	}
 )
 
+type SuccessHandler = func(c *gin.Context, token *oauth2.Token)
+
 type OAuth2Svc struct {
 	ClientId              string
 	Scope                 string
@@ -43,15 +44,15 @@ type OAuth2Svc struct {
 	AccessTokenEndpoint   string
 	AuthorizationEndpoint string
 	LogoutEndpoint        string
+	Checker               authz.Checker
+	TokenKey              authz.TokenKey
 
-	LoginCallbackUrl     string
-	RedirectUriParamName string
-	SessionDomain        string
-	RedisCli             redis.UniversalClient
-	TokenResolver        xresolver.TokenResolver
-	Session              *session.Session
-	Checker              authz.Checker
-	TokenKey             authz.TokenKey
+	LoginCallbackEndpoint string
+	RedirectUriParamName  string
+	SessionDomain         string
+	RedisCli              redis.UniversalClient
+	Session               *session.Session
+	SuccessHandler        SuccessHandler
 }
 
 func Create() (*OAuth2Svc, error) {
@@ -77,11 +78,11 @@ func Create() (*OAuth2Svc, error) {
 		BasicAuthzHeader:      oauth2.CreateBasicAuth(clientId, os.Getenv("OAUTH2_CLIENT_SECRET")),
 		ClientId:              clientId,
 		RedisCli:              client,
-		LoginCallbackUrl:      fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
+		LoginCallbackEndpoint: fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
 		RedirectUriParamName:  ruParamName,
-		TokenResolver:         checker.GetTokenResolver(),
 		Checker:               checker,
 		TokenKey:              key.Create(rest.CreateWithEnv(), 6*time.Hour),
+		SuccessHandler:        successHandler,
 	}
 
 	auth2Svc.Session = session.Create(
@@ -133,16 +134,13 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		err := svc.RedisCli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Scan(token)
 		if err == nil {
 			// session 有认证信息直接返回
-			c.Header("X-Auth-Request-User-Id", strconv.FormatInt(token.Uid, 10))
-			c.Header("X-Auth-Request-User-Name", token.Uname)
-			c.Header("Authorization", string(token.Type)+" "+token.Value)
-			c.JSON(http.StatusOK, r.Succeed("authenticated"))
+			svc.SuccessHandler(c, token)
 			return
 		}
 	}
 
 	// 2.尝试从请求头，URL参数之中获取token
-	token, err := svc.TokenResolver.Resolve(c)
+	token, err := svc.Checker.GetTokenResolver().Resolve(c)
 	if err != nil || token == nil {
 		log.Println("not found access token")
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
@@ -170,10 +168,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 6.token校验成功，将认证信息添加到当前请求头
-	c.Header("X-Auth-Request-User-Id", strconv.FormatInt(claims.UserId, 20))
-	c.Header("X-Auth-Request-User-Name", claims.Username)
-	c.Header("Authorization", string(token.Type)+" "+token.Value)
-	c.JSON(http.StatusOK, r.Succeed("authenticated"))
+	svc.SuccessHandler(c, token)
 	return
 }
 
@@ -196,7 +191,7 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 	}
 	// 将请求转发到OAuth2 authorize endpoint
 	redirectUri = fmt.Sprintf("%s?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
-		svc.AuthorizationEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackUrl)
+		svc.AuthorizationEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackEndpoint)
 	log.Println("login handler, redirecting to: " + redirectUri)
 	c.Redirect(http.StatusMovedPermanently, redirectUri)
 }
@@ -217,7 +212,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	}
 	// 根据code获取access token
 	code := c.Query("code")
-	token, err := svc.ExchangeAccessTokenByCode(code, svc.LoginCallbackUrl)
+	token, err := svc.ExchangeAccessTokenByCode(code, svc.LoginCallbackEndpoint)
 	if err != nil {
 		log.Println("unable to exchange code for access token: " + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to exchange code for access token"))
@@ -252,7 +247,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 }
 
 func (svc *OAuth2Svc) Logout(c *gin.Context) {
-	token, err := svc.TokenResolver.Resolve(c)
+	token, err := svc.Checker.GetTokenResolver().Resolve(c)
 	if err != nil || token == nil {
 		c.JSON(http.StatusForbidden, r.Failed("not found access token"))
 		return
@@ -283,4 +278,12 @@ func (svc *OAuth2Svc) Logout(c *gin.Context) {
 func (svc *OAuth2Svc) delToken(c *gin.Context) {
 	sess := sessions.Default(c)
 	svc.RedisCli.Del(context.Background(), session.TokenKey(sess.ID()))
+}
+
+func successHandler(c *gin.Context, token *oauth2.Token) {
+	c.Header("X-Auth-Request-Tenant-Id", strconv.FormatInt(token.Tid, 20))
+	c.Header("X-Auth-Request-User-Id", strconv.FormatInt(token.Uid, 20))
+	c.Header("X-Auth-Request-User-Name", token.Uname)
+	c.Header("Authorization", string(token.Type)+" "+token.Value)
+	c.JSON(http.StatusOK, r.Succeed("authenticated"))
 }
