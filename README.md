@@ -1,8 +1,5 @@
 # Ingress 统一认证代理
 
-## 基于OAuth2 authorize endpoint实现
-![实现思路](.img/parse-jwt-with-key.png)
-
 ## 认证流程
 
 > 1.访问资源服务https://d-it-upms-demo-3.gzv-k8s.xyz.com/user/1
@@ -36,7 +33,8 @@ docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:lates
 ```
 
 ### 2.token校验配置，使用JWT或者数字签名认证
-
+### 基于OAuth2 authorize endpoint实现
+![实现思路](.img/parse-jwt-with-key.png)
 #### 2.1 JWT token校验——本地解析token
 
 ##### 环境变量配置
