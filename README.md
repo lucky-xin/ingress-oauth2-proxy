@@ -29,6 +29,7 @@ docker tag xin8/oauth2-ingress-proxy:latest gzv-reg.lucky.xyz/library/oauth2-pro
 ```
 ### 1.2构建镜像
 ```shell
+docker buildx create --name multiple-platfoems --use
 docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:latest .
 ```
 
