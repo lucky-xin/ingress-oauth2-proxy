@@ -108,7 +108,7 @@ func (svc *Session) GetState(c *gin.Context) (*oauth2.StateInf, error) {
 	return nil, errors.New("invalid state in session")
 }
 
-func (svc *Session) CreateState(c *gin.Context) (s string, err error) {
+func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	ru := c.Query(svc.uriParamName)
 	if ru == "" {
 		return "", errors.New("not found redirect uri in query param:" + svc.uriParamName)
@@ -131,13 +131,13 @@ func (svc *Session) CreateState(c *gin.Context) (s string, err error) {
 	if err != nil {
 		return
 	}
-	state := base64.StdEncoding.EncodeToString(buff.Bytes())
+	state = base64.StdEncoding.EncodeToString(buff.Bytes())
 	ex := svc.rcli.SetEx(context.Background(), Key(state), ru, svc.stateExpr)
 	err = ex.Err()
 	if err != nil {
 		return
 	}
-	_, err = svc.CreateSession(c, svc.stateExpr, sessStateName, s)
+	_, err = svc.CreateSession(c, svc.stateExpr, sessStateName, state)
 	return state, err
 }
 
