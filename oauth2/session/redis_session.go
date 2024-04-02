@@ -101,8 +101,10 @@ func (svc *Session) GetState(c *gin.Context) (*oauth2.StateInf, error) {
 	switch val.(type) {
 	case map[string]interface{}:
 		cache := val.(map[string]interface{})
-		if c.Query(stateFieldName) == cache["value"] {
-			return &oauth2.StateInf{Value: cache["value"].(string), RedirectUri: cache[svc.uriParamName].(string)}, nil
+		s := cache["value"].(string)
+		log.Println("cache state is:" + s)
+		if c.Query(stateFieldName) == s {
+			return &oauth2.StateInf{Value: s, RedirectUri: cache[svc.uriParamName].(string)}, nil
 		}
 	}
 	return nil, errors.New("invalid state in session")
