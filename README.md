@@ -251,7 +251,7 @@ metadata:
     nginx.ingress.kubernetes.io/auth-cache-duration: 200 201 202 30m
     nginx.ingress.kubernetes.io/auth-cache-key: $remote_user$http_authorization
     nginx.ingress.kubernetes.io/auth-keepalive-share-vars: 'true'
-    nginx.ingress.kubernetes.io/auth-response-headers: Authorization,X-Auth-Request-User-Id,X-Auth-Request-User-Name
+    nginx.ingress.kubernetes.io/auth-response-headers: Authorization,X-Auth-Request-User-Id,X-Auth-Request-User-Name,X-Auth-Request-Tenant-Id
     nginx.ingress.kubernetes.io/auth-signin-redirect-param: ru
     nginx.ingress.kubernetes.io/cors-allow-credentials: 'true'
     nginx.ingress.kubernetes.io/enable-cors: 'true'
