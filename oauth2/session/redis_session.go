@@ -94,7 +94,7 @@ func (svc *Session) RedirectUriParamName() string {
 
 func (svc *Session) GetState(c *gin.Context) (*oauth2.StateInf, error) {
 	sess := sessions.Default(c)
-	val := sess.Get(stateFieldName)
+	val := sess.Get(sessStateName)
 	if val == nil {
 		return nil, errors.New("not found state in session")
 	}
