@@ -68,13 +68,13 @@ docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:lates
 
 ##### 环境变量配置
 
-| 名称            | 描述                                     | 必填 | 默认值    |
-|---------------|----------------------------------------|----|--------
-| `REDIS_TYPE`  | Redis类型单机、主从模式配置：single，集群模式配置：cluster | 否  | single |
-| `REDIS_NODES` | Redis节点如：ip1:port1,ip2:port2           | 是  |        |
-| `REDIS_USER`  | Redis用户                                | 否  |        |
-| `REDIS_PWD`   | Redis密码                                | 是  |        |
-| `REDIS_DB`    | Redis DB                               | 3  |        |
+| 名称            | 描述                                         | 必填 | 默认值        |
+|---------------|--------------------------------------------|----|------------
+| `REDIS_TYPE`  | Redis类型单机、主从模式配置：STANDALONE，集群模式配置：CLUSTER | 否  | STANDALONE |
+| `REDIS_NODES` | Redis节点如：ip1:port1,ip2:port2               | 是  |            |
+| `REDIS_USER`  | Redis用户                                    | 否  |            |
+| `REDIS_PWD`   | Redis密码                                    | 是  |            |
+| `REDIS_DB`    | Redis DB                                   | 3  |            |
 
 ### 3. k8s部署OAuth2代理认证服务OAuth2-Proxy
 

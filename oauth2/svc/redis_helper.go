@@ -10,13 +10,13 @@ import (
 )
 
 func CreateRedis() (redis.UniversalClient, error) {
-	rt := env.GetString("REDIS_TYPE", "single")
+	rt := env.GetString("REDIS_TYPE", "STANDALONE")
 	nodes := env.GetStringArray("REDIS_NODES", []string{"gzv-dev-redis-1.xyz.com:6379"})
 	user := env.GetString("REDIS_USER", "")
 	pwd := env.GetString("REDIS_PWD", "xxx")
 	db := env.GetInt("REDIS_DB", 3)
 	cliName := env.GetString("REDIS_CLI_NAME", "ingress-oauth2-proxy")
-	if rt == "single" {
+	if rt == "STANDALONE" {
 		return redis.NewClient(
 			&redis.Options{
 				Addr:     nodes[0],
@@ -24,7 +24,7 @@ func CreateRedis() (redis.UniversalClient, error) {
 				Password: pwd,
 				DB:       db,
 			}), nil
-	} else if rt == "cluster" {
+	} else if rt == "CLUSTER" {
 		cli := redis.NewClusterClient(
 			&redis.ClusterOptions{
 				Addrs:      nodes,
