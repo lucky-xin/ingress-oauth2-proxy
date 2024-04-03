@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/base32"
+	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bsm/redislock"
 	sessions2 "github.com/gin-contrib/sessions"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
+	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
+	"github.com/lucky-xin/xyz-common-go/env"
+	"github.com/lucky-xin/xyz-common-go/text"
 	redisV9 "github.com/redis/go-redis/v9"
 	"log"
 	"net/http"
@@ -143,20 +148,33 @@ func (s *RedisStore) SetMaxAge(v int) {
 // NewRedisStore returns a new RediStore.
 // cli: is an abstract c
 // NewRedisStore instantiates a RediStore with a cli passed in.
-func NewRedisStore(cli redisV9.UniversalClient, keyPrefix string, keyPairs ...[]byte) (*RedisStore, error) {
-	rs := &RedisStore{
-		RedisCli: cli,
+func NewRedisStore(
+	rcli redisV9.UniversalClient,
+	lcli *redislock.Client,
+	keyPrefix string,
+	keyPairs ...[]byte) (rs *RedisStore, err error) {
+	if len(keyPairs) == 0 {
+		keyPairs, err = initKeyPairs(rcli, lcli)
+		if err != nil {
+			return
+		}
+	}
+	rs = &RedisStore{
+		RedisCli: rcli,
 		Codecs:   securecookie.CodecsFromPairs(keyPairs...),
 		Opts: &sessions.Options{
-			Path:   "/",
-			MaxAge: sessionExpire,
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteNoneMode,
+			Path:     env.GetString("OAUTH2_SESSION_PATH", "/"),
+			MaxAge:   sessionExpire,
 		},
 		DefaultMaxAge: 60 * 20, // 20 minutes seems like a reasonable default
 		maxLength:     4096,
 		keyPrefix:     keyPrefix,
 		serializer:    JSONSerializer{},
 	}
-	_, err := rs.ping()
+	_, err = rs.ping()
 	return rs, err
 }
 
@@ -304,4 +322,71 @@ func (s *RedisStore) delete(session *sessions.Session) error {
 		return err
 	}
 	return nil
+}
+
+func initKeyPairs(rcli redisV9.UniversalClient, lcli *redislock.Client) (byts [][]byte, err error) {
+	initKey := oauth2.SessionName + ":cookie_secret"
+	var block *text.Block
+	res, _ := rcli.Get(context.Background(), initKey).Result()
+	if res != "" {
+		var s []byte
+		s, err = base64.StdEncoding.DecodeString(res)
+		if err != nil {
+			return
+		}
+		var buffer bytes.Buffer
+		_, err = buffer.Write(s)
+		if err != nil {
+			return
+		}
+		block, err = text.FromBuffer(nil, &buffer)
+		if err != nil {
+			return
+		}
+		for i := range block.Segments {
+			segment := block.Segments[i]
+			byts = append(byts, segment.Bytes)
+		}
+	}
+
+	lockKey := "init_cookie_key_pairs_lock"
+	lock, err := lcli.Obtain(context.Background(), lockKey, time.Second*30,
+		&redislock.Options{RetryStrategy: redislock.ExponentialBackoff(time.Second, time.Second*30)},
+	)
+	defer func(lock *redislock.Lock, ctx context.Context) {
+		err := lock.Release(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(lock, context.Background())
+
+	if err != nil {
+		fmt.Printf("ERROR: %s\n", err.Error())
+		return
+	} else if lcli == nil {
+		fmt.Println("ERROR: could not obtain lcli")
+		return
+	}
+
+	byts = [][]byte{
+		securecookie.GenerateRandomKey(64),
+		securecookie.GenerateRandomKey(32),
+		securecookie.GenerateRandomKey(64),
+		securecookie.GenerateRandomKey(32),
+		securecookie.GenerateRandomKey(64),
+		securecookie.GenerateRandomKey(32),
+	}
+	var segments []*text.Segment
+	for i := range byts {
+		b := byts[i]
+		segments = append(segments, &text.Segment{Length: len(b), Bytes: b})
+	}
+	block = &text.Block{Segments: segments}
+	buff, err := block.ToBuffer()
+	if err != nil {
+		return
+	}
+	secret := base64.StdEncoding.EncodeToString(buff.Bytes())
+	_, err = rcli.Set(context.Background(), initKey, secret, time.Hour*87600).Result()
+	return
 }

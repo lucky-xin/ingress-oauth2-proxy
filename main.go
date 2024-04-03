@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/bsm/redislock"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
@@ -38,9 +39,9 @@ func main() {
 	engine.Group("/health").GET("", func(c *gin.Context) {
 		c.String(http.StatusOK, "OK")
 	})
+	locker := redislock.New(auth2Svc.RedisCli)
 	// 基于redis的session配置
-	sessionKeyPairs := env.GetString("OAUTH2_SESSION_KEY_PAIRS", "WWtkT05BPT0")
-	store, err := session.NewRedisStore(auth2Svc.RedisCli, "session:ingress_oauth2_proxy:", []byte(sessionKeyPairs))
+	store, err := session.NewRedisStore(auth2Svc.RedisCli, locker, oauth2.SessionName+":session:")
 	if err != nil {
 		panic(err)
 	}

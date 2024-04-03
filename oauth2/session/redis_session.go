@@ -92,22 +92,32 @@ func (svc *Session) RedirectUriParamName() string {
 	return svc.uriParamName
 }
 
-func (svc *Session) GetState(c *gin.Context) (*oauth2.StateInf, error) {
+func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 	sess := sessions.Default(c)
 	val := sess.Get(sessStateName)
 	if val == nil {
-		return nil, errors.New("not found state in session")
+		err = errors.New("not found state in session")
+		return
 	}
+	var ru, state string
 	switch val.(type) {
 	case map[string]interface{}:
 		cache := val.(map[string]interface{})
-		s := cache["value"].(string)
-		log.Println("cache state is:" + s)
-		if c.Query(stateFieldName) == s {
-			return &oauth2.StateInf{Value: s, RedirectUri: cache[svc.uriParamName].(string)}, nil
-		}
+		state = cache["value"].(string)
+	case string:
+		state = val.(string)
 	}
-	return nil, errors.New("invalid state in session")
+	log.Println("cache state is:" + state)
+	if c.Query(stateFieldName) == state {
+		ru, err = svc.rcli.Get(context.Background(), Key(state)).Result()
+		if err != nil {
+			return
+		}
+		inf = &oauth2.StateInf{Value: state, RedirectUri: ru}
+		return
+	}
+	err = errors.New("invalid state in session")
+	return
 }
 
 func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
@@ -153,9 +163,9 @@ func createRandomBytes(len int) (byts []byte, err error) {
 }
 
 func TokenKey(suffix string) string {
-	return "session_token:" + suffix
+	return oauth2.SessionName + ":token:" + suffix
 }
 
 func Key(state string) string {
-	return "oauth2_proxy:state:" + state
+	return oauth2.SessionName + ":state:" + state
 }
