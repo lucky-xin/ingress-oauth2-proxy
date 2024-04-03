@@ -99,24 +99,27 @@ func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 		err = errors.New("not found state in session")
 		return
 	}
-	var ru, state string
+	var ru, stateCache, stateUrl string
 	switch val.(type) {
 	case map[string]interface{}:
 		cache := val.(map[string]interface{})
-		state = cache["value"].(string)
+		stateCache = cache["value"].(string)
 	case string:
-		state = val.(string)
+		stateCache = val.(string)
 	}
-	log.Println("cache state is:" + state)
-	if c.Query(stateFieldName) == state {
-		ru, err = svc.rcli.Get(context.Background(), Key(state)).Result()
-		if err != nil {
-			return
-		}
-		inf = &oauth2.StateInf{Value: state, RedirectUri: ru}
+
+	stateUrl = c.Query(stateFieldName)
+	log.Println("cache state is:" + stateCache)
+	log.Println("url   state is:" + stateUrl)
+	if stateUrl != stateCache {
+		err = errors.New("invalid state in session")
 		return
 	}
-	err = errors.New("invalid state in session")
+	ru, err = svc.rcli.Get(context.Background(), Key(stateCache)).Result()
+	if err != nil {
+		return
+	}
+	inf = &oauth2.StateInf{Value: stateCache, RedirectUri: ru}
 	return
 }
 
@@ -143,9 +146,8 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	if err != nil {
 		return
 	}
-	state = base64.StdEncoding.EncodeToString(buff.Bytes())
-	ex := svc.rcli.SetEx(context.Background(), Key(state), ru, svc.stateExpr)
-	err = ex.Err()
+	state = base64.URLEncoding.EncodeToString(buff.Bytes())
+	_, err = svc.rcli.SetEx(context.Background(), Key(state), ru, svc.stateExpr).Result()
 	if err != nil {
 		return
 	}
