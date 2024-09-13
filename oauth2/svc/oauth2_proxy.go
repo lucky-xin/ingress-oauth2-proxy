@@ -168,6 +168,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 4.校验token
+	log.Println("found token,type:" + token.Type)
 	claims, err := svc.Checker.Check(tk, token)
 	if err != nil {
 		log.Println("invalid access token")
