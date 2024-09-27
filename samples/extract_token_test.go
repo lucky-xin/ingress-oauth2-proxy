@@ -107,5 +107,5 @@ func TestExtractToken(test *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	println(deClaims.UserId)
+	println(deClaims.Id)
 }

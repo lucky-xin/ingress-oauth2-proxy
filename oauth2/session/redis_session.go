@@ -53,11 +53,11 @@ func Create(sessionDomain, uriParamName string, stateExpr time.Duration, rcli re
 	}
 }
 
-func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.XyzClaims) (err error) {
+func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
 	ses, err := svc.CreateSession(c, expire, sessUserInfoName, map[string]interface{}{
-		"uid":   claims.UserId,
+		"uid":   claims.Id,
 		"tid":   claims.TenantId,
 		"uname": claims.Username,
 	})

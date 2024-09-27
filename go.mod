@@ -23,9 +23,10 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/gorilla/sessions v1.4.0
 	github.com/lucky-xin/xyz-common-go v1.3.0
-	github.com/lucky-xin/xyz-common-oauth2-go v1.3.1
-	github.com/lucky-xin/xyz-gmsm-go v1.0.2
+	github.com/lucky-xin/xyz-common-oauth2-go v1.3.7
+	github.com/lucky-xin/xyz-gmsm-go v1.0.3
 	github.com/redis/go-redis/v9 v9.6.1
+	github.com/tjfoc/gmsm v1.4.1
 )
 
 require (
@@ -52,7 +53,6 @@ require (
 	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
-	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.10.0 // indirect

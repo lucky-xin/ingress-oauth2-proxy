@@ -13,9 +13,11 @@ import (
 	xjwt "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/jwt"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/signature"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf/rest"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/details"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
+	sign2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/sign"
 	"io"
 	"log"
 	"net/http"
@@ -42,14 +44,12 @@ func TestOAUth2SvrTest(t *testing.T) {
 			AppSecret: "MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEAl3.lcx.xyz",
 			TenantId:  1,
 			Username:  "lcx",
-			UserId:    1,
 		},
 		"9c607513b605406497afc395b011xyz": {
 			AppId:     "9c607513b605406497afc395b0xyz",
 			AppSecret: "MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEAl3xyz.xyz",
 			TenantId:  1,
 			Username:  "hahaha",
-			UserId:    2,
 		},
 	}
 	confSvc := &InMemoryEncryptionInfSvc{confs: confs}
@@ -59,21 +59,22 @@ func TestOAUth2SvrTest(t *testing.T) {
 	gin.SetMode(env.GetString("GIN_MODE", gin.DebugMode))
 	engine := gin.New()
 	tokenResolver := resolver.Create("authz", []oauth2.TokenType{oauth2.SIGN})
-	restTokenKey := key.Create(rest.CreateWithEnv(), 6*time.Hour)
-
+	tokenKeySvc := key.CreateWithEnv()
+	detailsSvc := details.CreateWithEnv()
+	encryptSvc := conf.CreateWithEnv()
+	s := sign2.Create(detailsSvc, encryptSvc)
 	checker, err := wrapper.Create(
 		tokenResolver,
-		restTokenKey,
+		tokenKeySvc,
 		map[oauth2.TokenType]authz.Checker{
-			oauth2.OAUTH2: xjwt.Create([]string{"HS512"}, tokenResolver),
-			oauth2.SIGN: signature.CreateWithRest(
-				"http://127.0.0.1:6666/oauth2/encryption-conf/app-id",
-				time.Hour*6,
-				time.Hour*6,
+			oauth2.OAUTH2: xjwt.Create([]string{"HS512"}, tokenResolver, detailsSvc),
+			oauth2.SIGN: signature.Create(
+				s,
+				detailsSvc,
+				encryptSvc,
 				tokenResolver,
 			),
-		},
-	)
+		})
 	if err != nil {
 		panic(err)
 	}

@@ -29,7 +29,7 @@ import (
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf/rest"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
 	"github.com/redis/go-redis/v9"
 	"io"
@@ -59,7 +59,7 @@ type OAuth2Svc struct {
 	AuthorizationEndpoint string
 	LogoutEndpoint        string
 	Checker               authz.Checker
-	TokenKey              authz.TokenKey
+	TokenKey              authz.TokenKeySvc
 
 	LoginCallbackEndpoint string
 	RedirectUriParamName  string
@@ -95,7 +95,7 @@ func Create() (*OAuth2Svc, error) {
 		LoginCallbackEndpoint: fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
 		RedirectUriParamName:  ruParamName,
 		Checker:               checker,
-		TokenKey:              key.Create(rest.CreateWithEnv(), 6*time.Hour),
+		TokenKey:              key.Create(conf.CreateWithEnv(), 6*time.Hour),
 		SuccessHandler:        successHandler,
 	}
 
@@ -161,7 +161,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 3.获取JWT token key
-	tk, err := svc.TokenKey.Get()
+	tk, err := svc.TokenKey.GetTokenKey()
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
@@ -235,7 +235,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	}
 
 	// 获取JWT 解析key
-	tk, err := svc.TokenKey.Get()
+	tk, err := svc.TokenKey.GetTokenKey()
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("get token key failed"))

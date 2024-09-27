@@ -2,6 +2,7 @@ package samples
 
 import (
 	"github.com/lucky-xin/xyz-gmsm-go/encryption"
+	"github.com/tjfoc/gmsm/sm2"
 	"testing"
 )
 

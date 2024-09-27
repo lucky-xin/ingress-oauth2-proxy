@@ -11,13 +11,14 @@ import (
 	xjwt "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/jwt"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/signature"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf/rest"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/details"
+	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
 	resolver2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/resolver"
+	sign2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2/sign"
 	"io"
 	"net/http"
 	"testing"
-	"time"
 )
 
 func TestOAUth2CliTest(tet *testing.T) {
@@ -108,18 +109,20 @@ func TestOAUth2CliTest(tet *testing.T) {
 
 	// 解析token
 	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: tokenResp.Data().AccessToken}
-
+	tokenKeySvc := key.CreateWithEnv()
 	resolver := resolver2.Create("oauthz", []oauth2.TokenType{oauth2.OAUTH2})
-	restTokenKey := key.Create(rest.CreateWithEnv(), 6*time.Hour)
+	detailsSvc := details.CreateWithEnv()
+	encryptSvc := conf.CreateWithEnv()
+	s := sign2.Create(detailsSvc, encryptSvc)
 	checker, err := wrapper.Create(
 		resolver,
-		restTokenKey,
+		tokenKeySvc,
 		map[oauth2.TokenType]authz.Checker{
-			oauth2.OAUTH2: xjwt.Create([]string{"HS512"}, resolver),
-			oauth2.SIGN: signature.CreateWithRest(
-				"http://127.0.0.1:6666/oauth2/encryption-conf/app-id",
-				time.Hour*6,
-				time.Hour*6,
+			oauth2.OAUTH2: xjwt.Create([]string{"HS512"}, resolver, detailsSvc),
+			oauth2.SIGN: signature.Create(
+				s,
+				detailsSvc,
+				encryptSvc,
 				resolver,
 			),
 		},
@@ -131,7 +134,7 @@ func TestOAUth2CliTest(tet *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	println(deClaims.UserId)
+	println(deClaims.Id)
 	println(deClaims.Username)
 	auth := oauth2.CreateBasicAuth("piston", "lskcjakjck")
 	println(auth)

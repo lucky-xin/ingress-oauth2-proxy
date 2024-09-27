@@ -40,18 +40,16 @@ docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:lates
 
 ##### 环境变量配置
 
-| 名称                                | 描述                                                                     | 必填 | 默认值                                          |
-|-----------------------------------|------------------------------------------------------------------------|----|----------------------------------------------
-| `OAUTH2_TOKEN_KEY`                | JWT解析Key，可通过环境变量直接配置，如果没有配置则配置`OAUTH2_TOKEN_KEY_ENDPOINT`，通过Rest API获取 | 否  |                                              |
-| `OAUTH2_TOKEN_KEY_ENDPOINT`       | 获取JWT解析Key服务URL                                                        | 否  | http://127.0.0.1:6666/oauth2/token-key       |
-| `OAUTH2_TOKEN_KEY_JP`             | 获取JWT解析Key，请求返回key所在的JSONPath                                          | 否  | $.data.key                                   |
-| `OAUTH2_TOKEN_KEY_AES_KEY`        | 获取JWT解析Key，AES Key用于解析返回加密Key                                          | 否  |                                              |
-| `OAUTH2_TOKEN_KEY_AES_IV`         | 获取JWT解析Key，AES Iv用于解析返回加密Key                                           | 否  |                                              |
-| `OAUTH2_URI_PARAM_TOKEN_NAME`     | 支持将token放到url参数之中的对应参数名称                                               | 否  | authz                                        |
-| `OAUTH2_APP_ID`                   | 获取JWT解析Key，数字签名校验App Id                                                | 否  |                                              |
-| `OAUTH2_APP_SECRET`               | 获取JWT解析Key，数字签名校验App Secret                                            | 否  |                                              |
-| `OAUTH2_JWT_VALID_METHODS`        | 解析JWT校验算法                                                              | 否  | HS512,HS256                                  |
-| `OAUTH2_ENCRYPTION_CONF_ENDPOINT` | 获取密钥配置信息url                                                            | 否  | http://127.0.0.1:4000/oauth2/encryption-conf |
+| 名称                                 | 描述                            | 必填 | 默认值         |
+|------------------------------------|-------------------------------|----|-------------
+| `OAUTH2_ISSUER_ENDPOINT`           | OAuth2服务端点                    | 否  |             |
+| `OAUTH2_TOKEN_KEY_JP`              | 获取JWT解析Key，请求返回key所在的JSONPath | 否  | $.data.key  |
+| `OAUTH2_TOKEN_KEY_SM2_PRIVATE_KEY` | 获取JWT解析Key，AES Key用于解析返回加密Key | 否  |             |
+| `OAUTH2_TOKEN_KEY_SM2_PUBLIC_KEY`  | 获取JWT解析Key，AES Iv用于解析返回加密Key  | 否  |             |
+| `OAUTH2_URI_PARAM_TOKEN_NAME`      | 支持将token放到url参数之中的对应参数名称      | 否  | authz       |
+| `OAUTH2_APP_ID`                    | 获取JWT解析Key，数字签名校验App Id       | 否  |             |
+| `OAUTH2_APP_SECRET`                | 获取JWT解析Key，数字签名校验App Secret   | 否  |             |
+| `OAUTH2_JWT_VALID_METHODS`         | 解析JWT校验算法                     | 否  | HS512,HS256 |
 
 #### 2.2 数字签名token校验
 
@@ -59,7 +57,6 @@ docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:lates
 
 | 名称                                | 描述                    | 必填 | 默认值                                          |
 |-----------------------------------|-----------------------|----|----------------------------------------------
-| `OAUTH2_ENCRYPTION_CONF_ENDPOINT` | 获取密钥配置信息url           | 是  | http://127.0.0.1:4000/oauth2/encryption-conf |
 | `OAUTH2_SIGN_METHOD`              | 数字签名算法                | 否  | HmacSHA256                                   |
 | `OAUTH2_APP_ID`                   | 获取密钥配置信息签名的app id     | 是  |                                              |
 | `OAUTH2_APP_SECRET`               | 获取密钥配置信息签名的app secret | 是  |                                              |
@@ -125,20 +122,16 @@ stringData:
   OAUTH2_CLIENT_SECRET: "pi.s#t!xxx"
   # OAuth2 客户端对应的app id
   APP_ID: "f2aa0059a6e4456f8bac775c4fd***.xyz"
-  # OAuth2 客户端对应的app secret
-  APP_SECRET: "125809f6819ANBgkqpisshkiG***.xyz.***AASCAT4wggE6AgEAAkEAl3cpw0oz"
-  # 当前app id 的aes key
-  AES_KEY: "anFSRDdMejFralRVVExxyzJFWmx2MUI4"
+  # OAuth2 客户端对应的SM2 private hex key
+  OAUTH2_TOKEN_KEY_SM2_PRIVATE_KEY: "125809f6819ANBgkqpisshkiG***.xyz.***AASCAT4wggE6AgEAAkEAl3cpw0oz"
+  # OAuth2 客户端对应的SM2 public hex key
+  OAUTH2_TOKEN_KEY_SM2_PUBLIC_KEY: "anFSRDdMejFralRVVExxyzJFWmx2MUI4"
   # 当前app id 的aes iv
   AES_IV: "MVNxZmlxWjExMxyz"
   # 获取JWT 解析key url
-  OAUTH2_TOKEN_KEY_URL: "http://it-auth.dev-xyz-cloud.svc.cluster.local:21080/oauth2/token-key"
+  OAUTH2_ISSUER_ENDPOINT: "http://it-auth.dev-xyz-cloud.svc.cluster.local:21080"
   # 获取JWT 解析key请求返回key对应的JSONPath
   OAUTH2_TOKEN_KEY_JP: "$.data.key "
-  # 获取JWT 解析key请求返回key AES加密密钥
-  OAUTH2_TOKEN_KEY_AES_KEY: "eW1EbmNWdUs2YVRkU0VIRW5zbjZOTxyz"
-  # 获取JWT 解析key请求返回key AES加密密钥
-  OAUTH2_TOKEN_KEY_AES_IV: "QnhXeWRJRzF2ZktF"
   # 当前应用 app id
   OAUTH2_APP_ID: "xxxxxxxxxxxxxxxx"
   # 当前应用 app secret
@@ -147,8 +140,6 @@ stringData:
   OAUTH2_JWT_VALID_METHODS: "HS512,HS256"
   # 支持URL传递token，对应参数名称
   OAUTH2_URI_PARAM_TOKEN_NAME: "authz"
-  # 获取解密密钥url，如果配置了OAUTH2_TOKEN_KEY_AES_KEY和OAUTH2_TOKEN_KEY_AES_IV则不用配置
-  OAUTH2_ENCRYPTION_CONF_URL: "http://it-upms.dev-xyz-cloud.svc.cluster.local:21080/encryption-conf"
   # 数字签名算法，获取token key和解密密钥使用的签名算法
   OAUTH2_SIGN_METHOD: "HmacSHA256"
 ```
