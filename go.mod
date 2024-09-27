@@ -23,7 +23,7 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/gorilla/sessions v1.4.0
 	github.com/lucky-xin/xyz-common-go v1.3.0
-	github.com/lucky-xin/xyz-common-oauth2-go v1.3.8
+	github.com/lucky-xin/xyz-common-oauth2-go v1.3.9
 	github.com/lucky-xin/xyz-gmsm-go v1.0.3
 	github.com/redis/go-redis/v9 v9.6.1
 	github.com/tjfoc/gmsm v1.4.1
