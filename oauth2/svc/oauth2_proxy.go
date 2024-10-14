@@ -52,14 +52,12 @@ var (
 type SuccessHandler = func(c *gin.Context, token *oauth2.Token)
 
 type OAuth2Svc struct {
-	ClientId              string
-	Scope                 string
-	BasicAuthzHeader      string
-	AccessTokenEndpoint   string
-	AuthorizationEndpoint string
-	LogoutEndpoint        string
-	Checker               authz.Checker
-	TokenKey              authz.TokenKeySvc
+	ClientId             string
+	Scope                string
+	BasicAuthzHeader     string
+	OAuth2IssuerEndpoint string
+	Checker              authz.Checker
+	TokenKey             authz.TokenKeySvc
 
 	LoginCallbackEndpoint string
 	RedirectUriParamName  string
@@ -76,18 +74,12 @@ func Create() (*OAuth2Svc, error) {
 	}
 	checker := wrapper.CreateWithEnv()
 	clientId := os.Getenv("OAUTH2_CLIENT_ID")
-	accessTokenEndpoint := env.GetString("OAUTH2_ACCESS_TOKEN_ENDPOINT",
-		"https://d-it-auth.gzv-k8s.xyz.com/oauth/token")
-	authorizationEndpoint := env.GetString("OAUTH2_AUTHORIZATION_ENDPOINT",
-		"https://d-it-auth.gzv-k8s.xyz.com/oauth2/authorize")
-	logoutEndpoint := env.GetString("OAUTH2_LOGOUT_ENDPOINT",
-		"https://d-it-auth.gzv-k8s.xyz.com/oauth2/logout")
+	issuerEndpoint := env.GetString("OAUTH2_ISSUER_ENDPOINT",
+		"https://d-it-auth.gzv-k8s.xyz.com")
 	oauth2ProxyEndpoint := env.GetString("OAUTH2_PROXY_ENDPOINT", "http://127.0.0.1:80")
 	ruParamName := env.GetString("OAUTH2_REDIRECT_URI_PARAM_NAME", "ru")
 	auth2Svc := &OAuth2Svc{
-		AccessTokenEndpoint:   accessTokenEndpoint,
-		AuthorizationEndpoint: authorizationEndpoint,
-		LogoutEndpoint:        logoutEndpoint,
+		OAuth2IssuerEndpoint:  issuerEndpoint,
 		Scope:                 os.Getenv("OAUTH2_SCOPE"),
 		BasicAuthzHeader:      oauth2.CreateBasicAuth(clientId, os.Getenv("OAUTH2_CLIENT_SECRET")),
 		ClientId:              clientId,
@@ -114,7 +106,8 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 	//https://www.pistonidata.com&code=
 	reader := strings.NewReader(fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
 		svc.Scope, redirectUri, code))
-	req, err := http.NewRequest(http.MethodPost, svc.AccessTokenEndpoint, reader)
+	accessTokenEndpoint := svc.OAuth2IssuerEndpoint + "/oauth/token"
+	req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, reader)
 	if err != nil {
 		return
 	}
@@ -205,8 +198,8 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 		return
 	}
 	// 将请求转发到OAuth2 authorize endpoint
-	redirectUri = fmt.Sprintf("%s?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
-		svc.AuthorizationEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackEndpoint)
+	redirectUri = fmt.Sprintf("%s/oauth2/authorize?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
+		svc.OAuth2IssuerEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackEndpoint)
 	log.Println("login handler, redirecting to: " + redirectUri)
 	c.Redirect(http.StatusMovedPermanently, redirectUri)
 }
@@ -267,8 +260,8 @@ func (svc *OAuth2Svc) Logout(c *gin.Context) {
 		c.JSON(http.StatusForbidden, r.Failed("not found access token"))
 		return
 	}
-
-	req, err := http.NewRequest(http.MethodDelete, svc.AccessTokenEndpoint, bytes.NewBuffer(nil))
+	url := svc.OAuth2IssuerEndpoint + "/oauth2/logout"
+	req, err := http.NewRequest(http.MethodDelete, url, bytes.NewBuffer(nil))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, r.Failed("create delete request failed"))
 		return
