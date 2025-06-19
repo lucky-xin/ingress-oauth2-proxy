@@ -40,16 +40,16 @@ docker build -f Dockerfile-Build -t gzv-reg.lucky.xyz/library/oauth2-proxy:lates
 
 ##### 环境变量配置
 
-| 名称                                 | 描述                            | 必填 | 默认值         |
-|------------------------------------|-------------------------------|----|-------------
-| `OAUTH2_ISSUER_ENDPOINT`           | OAuth2服务端点                    | 否  |             |
-| `OAUTH2_TOKEN_KEY_JP`              | 获取JWT解析Key，请求返回key所在的JSONPath | 否  | $.data.key  |
-| `OAUTH2_TOKEN_KEY_SM2_PRIVATE_KEY` | 获取JWT解析Key，AES Key用于解析返回加密Key | 否  |             |
-| `OAUTH2_TOKEN_KEY_SM2_PUBLIC_KEY`  | 获取JWT解析Key，AES Iv用于解析返回加密Key  | 否  |             |
-| `OAUTH2_URI_PARAM_TOKEN_NAME`      | 支持将token放到url参数之中的对应参数名称      | 否  | authz       |
-| `OAUTH2_APP_ID`                    | 获取JWT解析Key，数字签名校验App Id       | 否  |             |
-| `OAUTH2_APP_SECRET`                | 获取JWT解析Key，数字签名校验App Secret   | 否  |             |
-| `OAUTH2_JWT_VALID_METHODS`         | 解析JWT校验算法                     | 否  | HS512,HS256 |
+| 名称                            | 描述                            | 必填 | 默认值         |
+|-------------------------------|-------------------------------|----|-------------
+| `OAUTH2_ISSUER_ENDPOINT`      | OAuth2服务端点                    | 否  |             |
+| `OAUTH2_TOKEN_KEY_JP`         | 获取JWT解析Key，请求返回key所在的JSONPath | 否  | $.data.key  |
+| `OAUTH2_SM2_PRIVATE_KEY`      | 获取JWT解析Key，AES Key用于解析返回加密Key | 否  |             |
+| `OAUTH2_SM2_PUBLIC_KEY`       | 获取JWT解析Key，AES Iv用于解析返回加密Key  | 否  |             |
+| `OAUTH2_URI_PARAM_TOKEN_NAME` | 支持将token放到url参数之中的对应参数名称      | 否  | authz       |
+| `OAUTH2_APP_ID`               | 获取JWT解析Key，数字签名校验App Id       | 否  |             |
+| `OAUTH2_APP_SECRET`           | 获取JWT解析Key，数字签名校验App Secret   | 否  |             |
+| `OAUTH2_JWT_VALID_METHODS`    | 解析JWT校验算法                     | 否  | HS512,HS256 |
 
 #### 2.2 数字签名token校验
 

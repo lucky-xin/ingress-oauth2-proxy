@@ -13,7 +13,7 @@
 #  limitations under the License.
 
 # 打包依赖阶段使用golang作为基础镜像
-FROM golang:1.23 as builder
+FROM golang:1.23 AS builder
 
 USER root
 
@@ -26,7 +26,7 @@ COPY . .
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-w -s" main.go
 
 # 运行阶段指定alpine作为基础镜像
-FROM alpine
+FROM alpine:latest
 
 LABEL maintainer="chaoxin.lu"
 
