@@ -93,7 +93,9 @@ data:
   OAUTH2_ACCESS_TOKEN_ENDPOINT: "http://it-auth.dev-xyz-cloud.svc.cluster.local:21080/oauth2/token"
   OAUTH2_AUTHORIZATION_ENDPOINT: "https://d-it-auth.gzv-k8s.lucky.xyz/oauth2/authorize"
   OAUTH2_PROXY_ENDPOINT: "https://d-it-auth-proxy.gzv-k8s.lucky.xyz"
+  OAUTH2_SESSION_DOMAIN: ".gzv-k8s.lucky.xyz"
   OAUTH2_REDIRECT_URI_PARAM_NAME: "ru"
+  OAUTH2_SESSION_STATE_EXPIRE_MS: "3600000"
   SERVER_PORT: "6666"
 ---
 apiVersion: v1

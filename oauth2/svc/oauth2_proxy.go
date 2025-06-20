@@ -292,6 +292,7 @@ func successHandler(c *gin.Context, token *oauth2.Token) {
 	c.Header("X-Auth-Request-Tenant-Id", strconv.FormatInt(token.Tid, 20))
 	c.Header("X-Auth-Request-User-Id", strconv.FormatInt(token.Uid, 20))
 	c.Header("X-Auth-Request-User-Name", token.Uname)
+	c.Header("X-Auth-Request-Role-Types", "")
 	c.Header("Authorization", string(token.Type)+" "+token.Value)
 	c.JSON(http.StatusOK, r.Succeed("authenticated"))
 }
