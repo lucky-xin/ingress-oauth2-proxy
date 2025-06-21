@@ -29,6 +29,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
+	mrand "math/rand"
 	"net/http"
 	"time"
 )
@@ -61,26 +62,18 @@ func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *
 		"tid":   claims.TenantId,
 		"uname": claims.Username,
 	})
-	if ses.Get(sessStateName) != nil {
-		ses.Delete(sessStateName)
-	}
-	tokenKey := TokenKey(ses.ID())
-	result, err := svc.rcli.Exists(context.Background(), tokenKey).Result()
-	if result != 0 || err != nil {
-		return
-	}
-	// 不保存params信息
-	err = svc.rcli.HSet(context.Background(), tokenKey, map[string]interface{}{
-		"tid":   t.Tid,
-		"uid":   t.Uid,
-		"uname": t.Uname,
-		"type":  string(t.Type),
-		"value": t.Value,
-	}).Err()
 	if err != nil {
 		return
 	}
-	err = svc.rcli.Expire(context.Background(), tokenKey, expire).Err()
+	if ses.Get(sessStateName) != nil {
+		ses.Delete(sessStateName)
+	}
+	// 不保存params信息
+	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), t, expire).Err()
+	if err != nil {
+		return
+	}
+	err = svc.rcli.Set(context.Background(), DetailsKey(ses.ID()), claims, RandomDuration(expire, expire*2)).Err()
 	return
 }
 
@@ -182,6 +175,15 @@ func TokenKey(suffix string) string {
 	return oauth2.SessionName + ":token:" + suffix
 }
 
+func DetailsKey(suffix string) string {
+	return oauth2.SessionName + ":details:" + suffix
+}
+
 func Key(state string) string {
 	return oauth2.SessionName + ":state:" + state
+}
+
+// RandomDuration 生成 min ~ max 之间的随机 Duration
+func RandomDuration(min, max time.Duration) time.Duration {
+	return min + time.Duration(mrand.Int63n(int64(max-min)))
 }

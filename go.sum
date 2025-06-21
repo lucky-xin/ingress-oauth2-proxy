@@ -83,10 +83,10 @@ github.com/klauspost/cpuid/v2 v2.2.10/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQe
 github.com/knz/go-libedit v1.10.1/go.mod h1:MZTVkCWyz0oBc7JOWP3wNAzd002ZbM/5hgShxwh4x8M=
 github.com/leodido/go-urn v1.4.0 h1:WT9HwE9SGECu3lg4d/dIA+jxlljEa1/ffXKmRjqdmIQ=
 github.com/leodido/go-urn v1.4.0/go.mod h1:bvxc+MVxLKB4z00jd1z+Dvzr47oO32F/QSNjSBOlFxI=
-github.com/lucky-xin/xyz-common-go v1.3.2 h1:Rv208q+AM54eP4cDhU+UNyVyGwpgWKQ3Wd7YU76vF/k=
-github.com/lucky-xin/xyz-common-go v1.3.2/go.mod h1:er8sLdOkO/O+nNjCOz7gG3wojZMMGA2kkXKtqeMJP0w=
-github.com/lucky-xin/xyz-common-oauth2-go v1.4.1 h1:3DoToUFr5fZSoK7ddOO8L8Qx6QFjJy3Ndr3EWVFLqm8=
-github.com/lucky-xin/xyz-common-oauth2-go v1.4.1/go.mod h1:cC1QIjsUOxZa5ybdlsIuPOjY2xu5g8WYuaMV5os1CSE=
+github.com/lucky-xin/xyz-common-go v1.3.4 h1:dWnE51+YlPsUfEfqGi2vcy734shvWLxNCmni/TaOaWQ=
+github.com/lucky-xin/xyz-common-go v1.3.4/go.mod h1:i9yExZG9i9oY9OthP7qDSkgx2cUOmTBhXY/bliR/QbI=
+github.com/lucky-xin/xyz-common-oauth2-go v1.4.4 h1:pnnBe5GzhOWOrQgjTeB4bUozW66GV/8AIK/UGqVcdQ4=
+github.com/lucky-xin/xyz-common-oauth2-go v1.4.4/go.mod h1:09JkeIA7/2HH7lzfNfaRIJPkDO+JqldhrhfB/i76iAc=
 github.com/lucky-xin/xyz-gmsm-go v1.1.0 h1:pFFIfQXv2jmGrUNX1pTxvP5VfBwXhqoy28p8z26KilQ=
 github.com/lucky-xin/xyz-gmsm-go v1.1.0/go.mod h1:eEgH0ObDeinshTCZTpYRIvtNXYKZauPraFopKplyxdk=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=

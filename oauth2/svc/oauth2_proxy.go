@@ -49,7 +49,7 @@ var (
 	}
 )
 
-type SuccessHandler = func(c *gin.Context, token *oauth2.Token)
+type SuccessHandler = func(c *gin.Context, token *oauth2.Token, details *oauth2.UserDetails)
 
 type OAuth2Svc struct {
 	ClientId             string
@@ -138,10 +138,12 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	log.Println("try get token from session, session id:" + sess.ID())
 	if sess.ID() != "" {
 		token := &oauth2.Token{}
-		err := svc.RedisCli.HGetAll(context.Background(), session.TokenKey(sess.ID())).Scan(token)
-		if err == nil {
+		details := &oauth2.UserDetails{}
+		err1 := svc.RedisCli.Get(context.Background(), session.TokenKey(sess.ID())).Scan(token)
+		err2 := svc.RedisCli.Get(context.Background(), session.DetailsKey(sess.ID())).Scan(details)
+		if err1 == nil && err2 == nil {
 			// session 有认证信息直接返回
-			svc.SuccessHandler(c, token)
+			svc.SuccessHandler(c, token, details)
 			return
 		}
 	}
@@ -176,7 +178,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 6.token校验成功，将认证信息添加到当前请求头
-	svc.SuccessHandler(c, token)
+	svc.SuccessHandler(c, token, claims)
 	return
 }
 
@@ -288,11 +290,20 @@ func (svc *OAuth2Svc) delToken(c *gin.Context) {
 	svc.RedisCli.Del(context.Background(), session.TokenKey(sess.ID()))
 }
 
-func successHandler(c *gin.Context, token *oauth2.Token) {
-	c.Header("X-Auth-Request-Tenant-Id", strconv.FormatInt(token.Tid, 20))
-	c.Header("X-Auth-Request-User-Id", strconv.FormatInt(token.Uid, 20))
-	c.Header("X-Auth-Request-User-Name", token.Uname)
-	c.Header("X-Auth-Request-Role-Types", "")
+func successHandler(c *gin.Context, token *oauth2.Token, details *oauth2.UserDetails) {
+	c.Header("X-Auth-Tenant-Id", strconv.FormatInt(int64(details.TenantId), 20))
+	c.Header("X-Auth-User-Id", strconv.FormatInt(details.Id, 20))
+	c.Header("X-Auth-User-Name", details.Username)
+	c.Header("X-Auth-Role-Ids", Int64SliceToString(details.RoleIds))
+	c.Header("X-Auth-Role-Types", Int64SliceToString(details.RoleTypes))
 	c.Header("Authorization", string(token.Type)+" "+token.Value)
 	c.JSON(http.StatusOK, r.Succeed("authenticated"))
+}
+
+func Int64SliceToString(arr []int64) string {
+	strArr := make([]string, len(arr))
+	for i, num := range arr {
+		strArr[i] = strconv.FormatInt(num, 10) // 转为十进制字符串
+	}
+	return strings.Join(strArr, ",")
 }
