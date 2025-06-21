@@ -361,6 +361,7 @@ func initKeyPairs(rcli redisV9.UniversalClient, lcli *redislock.Client) (byts []
 			segment := block.Segments[i]
 			byts = append(byts, segment.Bytes)
 		}
+		return
 	}
 
 	lockKey := "init_cookie_key_pairs_lock"

@@ -57,11 +57,11 @@ func Create(sessionDomain, uriParamName string, stateExpr time.Duration, rcli re
 func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
-	ses, err := svc.CreateSession(c, expire, sessUserInfoName, map[string]interface{}{
+	ses, err := svc.CreateSession(c, sessUserInfoName, map[string]interface{}{
 		"uid":   claims.Id,
 		"tid":   claims.TenantId,
 		"uname": claims.Username,
-	})
+	}, expire)
 	if err != nil {
 		return
 	}
@@ -77,7 +77,7 @@ func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *
 	return
 }
 
-func (svc *Session) CreateSession(c *gin.Context, expire time.Duration, key, val interface{}) (s sessions.Session, err error) {
+func (svc *Session) CreateSession(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error) {
 	s = sessions.Default(c)
 	log.Println("Creating ses... id:", s.ID())
 	s.Options(sessions.Options{
@@ -158,7 +158,7 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	if err != nil {
 		return
 	}
-	_, err = svc.CreateSession(c, svc.stateExpr, sessStateName, state)
+	_, err = svc.CreateSession(c, sessStateName, state, svc.stateExpr)
 	return state, err
 }
 
