@@ -87,6 +87,7 @@ github.com/lucky-xin/xyz-common-go v1.3.4 h1:dWnE51+YlPsUfEfqGi2vcy734shvWLxNCmn
 github.com/lucky-xin/xyz-common-go v1.3.4/go.mod h1:i9yExZG9i9oY9OthP7qDSkgx2cUOmTBhXY/bliR/QbI=
 github.com/lucky-xin/xyz-common-oauth2-go v1.4.4 h1:pnnBe5GzhOWOrQgjTeB4bUozW66GV/8AIK/UGqVcdQ4=
 github.com/lucky-xin/xyz-common-oauth2-go v1.4.4/go.mod h1:09JkeIA7/2HH7lzfNfaRIJPkDO+JqldhrhfB/i76iAc=
+github.com/lucky-xin/xyz-common-oauth2-go v1.4.5/go.mod h1:09JkeIA7/2HH7lzfNfaRIJPkDO+JqldhrhfB/i76iAc=
 github.com/lucky-xin/xyz-gmsm-go v1.1.0 h1:pFFIfQXv2jmGrUNX1pTxvP5VfBwXhqoy28p8z26KilQ=
 github.com/lucky-xin/xyz-gmsm-go v1.1.0/go.mod h1:eEgH0ObDeinshTCZTpYRIvtNXYKZauPraFopKplyxdk=
 github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=

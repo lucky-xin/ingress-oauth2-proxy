@@ -133,28 +133,29 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 
 // Check 验证Context之中是否有验证信息，验证成功返回200状态码，否则返回400和其他状态码
 func (svc *OAuth2Svc) Check(c *gin.Context) {
-	// 1.尝试从session之中获取认证信息
+	// 1.尝试从请求头，URL参数之中获取token
+	currToken, err := svc.Checker.GetTokenResolver().Resolve(c)
+	if err != nil {
+		log.Println("resolve token failed:", err.Error())
+		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
+		return
+	}
+
+	// 2.尝试从session之中获取认证信息
 	sess := sessions.Default(c)
 	log.Println("try get token from session, session id:" + sess.ID())
 	if sess.ID() != "" {
-		token := &oauth2.Token{}
+		cacheToken := &oauth2.Token{}
 		details := &oauth2.UserDetails{}
-		err1 := svc.RedisCli.Get(context.Background(), session.TokenKey(sess.ID())).Scan(token)
+		err1 := svc.RedisCli.Get(context.Background(), session.TokenKey(sess.ID())).Scan(cacheToken)
 		err2 := svc.RedisCli.Get(context.Background(), session.DetailsKey(sess.ID())).Scan(details)
-		if err1 == nil && err2 == nil {
+		if err1 == nil && err2 == nil && cacheToken != nil && cacheToken.Value == currToken.Value {
 			// session 有认证信息直接返回
-			svc.SuccessHandler(c, token, details)
+			svc.SuccessHandler(c, currToken, details)
 			return
 		}
 	}
 
-	// 2.尝试从请求头，URL参数之中获取token
-	token, err := svc.Checker.GetTokenResolver().Resolve(c)
-	if err != nil || token == nil {
-		log.Println("not found access token")
-		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
-		return
-	}
 	// 3.获取JWT token key
 	tk, err := svc.TokenKey.GetTokenKey()
 	if err != nil {
@@ -163,22 +164,22 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		return
 	}
 	// 4.校验token
-	log.Println("found token,type:" + token.Type)
-	claims, err := svc.Checker.Check(tk, token)
+	log.Println("found token,type:" + currToken.Type)
+	claims, err := svc.Checker.Check(tk, currToken)
 	if err != nil {
 		log.Println("invalid access token")
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
 	// 5.新建session，cookie，并将认证结果存入session之中
-	err = svc.Session.SaveAuthorization(c, token, claims)
+	err = svc.Session.SaveAuthorization(c, currToken, claims)
 	if err != nil {
 		log.Println("cannot save session: ", err.Error())
 		c.JSON(http.StatusInternalServerError, r.Failed("unauthorized"))
 		return
 	}
 	// 6.token校验成功，将认证信息添加到当前请求头
-	svc.SuccessHandler(c, token, claims)
+	svc.SuccessHandler(c, currToken, claims)
 	return
 }
 

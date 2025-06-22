@@ -68,7 +68,6 @@ func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *
 	if ses.Get(sessStateName) != nil {
 		ses.Delete(sessStateName)
 	}
-	// 不保存params信息
 	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), t, expire).Err()
 	if err != nil {
 		return
