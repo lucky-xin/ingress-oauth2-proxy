@@ -74,8 +74,7 @@ func Create() (*OAuth2Svc, error) {
 	}
 	checker := wrapper.CreateWithEnv()
 	clientId := os.Getenv("OAUTH2_CLIENT_ID")
-	issuerEndpoint := env.GetString("OAUTH2_ISSUER_ENDPOINT",
-		"https://d-it-auth.gzv-k8s.xyz.com")
+	issuerEndpoint := env.GetString("OAUTH2_ISSUER_ENDPOINT", "https://d-it-auth.gzv-k8s.xyz.com")
 	oauth2ProxyEndpoint := env.GetString("OAUTH2_PROXY_ENDPOINT", "http://127.0.0.1:80")
 	ruParamName := env.GetString("OAUTH2_REDIRECT_URI_PARAM_NAME", "ru")
 	auth2Svc := &OAuth2Svc{
@@ -123,6 +122,7 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 			log.Fatal(err)
 		}
 	}(resp.Body)
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return
