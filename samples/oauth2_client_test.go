@@ -113,7 +113,7 @@ func TestOAUth2CliTest(tet *testing.T) {
 	resolver := resolver2.Create("oauthz", []oauth2.TokenType{oauth2.OAUTH2})
 	detailsSvc := details.CreateWithEnv()
 	encryptSvc := conf.CreateWithEnv()
-	s := sign2.Create(detailsSvc, encryptSvc)
+	s := sign2.CreateWithEnv()
 	checker, err := wrapper.Create(
 		resolver,
 		tokenKeySvc,

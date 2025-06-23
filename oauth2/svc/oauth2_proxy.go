@@ -29,7 +29,6 @@ import (
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/authz/wrapper"
-	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/encrypt/conf"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/key"
 	"github.com/redis/go-redis/v9"
 	"io"
@@ -86,7 +85,7 @@ func Create() (*OAuth2Svc, error) {
 		LoginCallbackEndpoint: fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
 		RedirectUriParamName:  ruParamName,
 		Checker:               checker,
-		TokenKey:              key.Create(conf.CreateWithEnv(), 6*time.Hour),
+		TokenKey:              key.CreateWithEnv(),
 		SuccessHandler:        successHandler,
 	}
 
@@ -127,21 +126,14 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 	if err != nil {
 		return
 	}
+	token = &poauth2.TokenInf{}
 	err = json.Unmarshal(body, &token)
 	return
 }
 
 // Check 验证Context之中是否有验证信息，验证成功返回200状态码，否则返回400和其他状态码
 func (svc *OAuth2Svc) Check(c *gin.Context) {
-	// 1.尝试从请求头，URL参数之中获取token
-	currToken, err := svc.Checker.GetTokenResolver().Resolve(c)
-	if err != nil {
-		log.Println("resolve token failed:", err.Error())
-		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
-		return
-	}
-
-	// 2.尝试从session之中获取认证信息
+	// 1.尝试从session之中获取认证信息
 	sess := sessions.Default(c)
 	log.Println("try get token from session, session id:" + sess.ID())
 	if sess.ID() != "" {
@@ -149,15 +141,26 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 		details := &oauth2.UserDetails{}
 		err1 := svc.RedisCli.Get(context.Background(), session.TokenKey(sess.ID())).Scan(cacheToken)
 		err2 := svc.RedisCli.Get(context.Background(), session.DetailsKey(sess.ID())).Scan(details)
-		if err1 == nil && err2 == nil && cacheToken != nil && cacheToken.Value == currToken.Value {
+		if err1 == nil && err2 == nil && cacheToken != nil {
 			// session 有认证信息直接返回
-			svc.SuccessHandler(c, currToken, details)
+			svc.SuccessHandler(c, cacheToken, details)
 			return
 		}
 	}
 
+	// 2.尝试从请求头，URL参数之中获取token
+	currToken, err := svc.Checker.GetTokenResolver().Resolve(c)
+	if err != nil || currToken == nil {
+		if err != nil {
+			log.Println("resolve token failed:", err.Error())
+		}
+		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
+		return
+	}
+
 	// 3.获取JWT token key
 	tk, err := svc.TokenKey.GetTokenKey()
+	log.Println("get token key succeed.")
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
@@ -167,7 +170,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	log.Println("found token,type:" + currToken.Type)
 	claims, err := svc.Checker.Check(tk, currToken)
 	if err != nil {
-		log.Println("invalid access token")
+		log.Println("invalid access token:", err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
@@ -229,9 +232,8 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to exchange code for access token"))
 		return
 	}
-
 	// 获取JWT 解析key
-	tk, err := svc.TokenKey.GetTokenKey()
+	keyBytes, err := svc.TokenKey.GetTokenKey()
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("get token key failed"))
@@ -239,12 +241,13 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	}
 	// 解析token
 	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token.AccessToken}
-	details, err := svc.Checker.Check(tk, t)
+	details, err := svc.Checker.Check(keyBytes, t)
 	if err != nil {
-		log.Println("decode token err: " + err.Error())
+		log.Println("decode token err: ", err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("decode token failed"))
 		return
 	}
+
 	// 新建session，cookie并将认证信息存入session之中
 	err = svc.Session.SaveAuthorization(c, t, details)
 	if err != nil {
@@ -252,6 +255,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
 		return
 	}
+	svc.Session.DeleteState(c)
 	log.Println("callback handle succeed, redirecting to: " + state.RedirectUri)
 	// 将请求转发到原来的地址
 	c.Redirect(http.StatusMovedPermanently, state.RedirectUri)

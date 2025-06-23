@@ -78,13 +78,12 @@ func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *
 
 func (svc *Session) CreateSession(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error) {
 	s = sessions.Default(c)
-	log.Println("Creating ses... id:", s.ID())
 	s.Options(sessions.Options{
 		Domain:   svc.sessionDomain,
 		Path:     env.GetString("OAUTH2_SESSION_PATH", "/"),
 		MaxAge:   int(expire.Seconds()),
-		Secure:   true,
-		HttpOnly: true,
+		Secure:   env.GetBool("OAUTH2_SESSION_SECURE", true),
+		HttpOnly: env.GetBool("OAUTH2_SESSION_HTTP_ONLY", true),
 		SameSite: http.SameSiteNoneMode,
 	})
 	s.Set(key, val)
@@ -115,8 +114,6 @@ func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 	}
 
 	stateUrl = c.Query(stateFieldName)
-	log.Println("cache state is:" + stateCache)
-	log.Println("url   state is:" + stateUrl)
 	if stateUrl != stateCache {
 		err = errors.New("invalid state in session")
 		return
@@ -159,6 +156,11 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	}
 	_, err = svc.CreateSession(c, sessStateName, state, svc.stateExpr)
 	return state, err
+}
+
+func (svc *Session) DeleteState(c *gin.Context) {
+	sess := sessions.Default(c)
+	sess.Delete(sessStateName)
 }
 
 func createRandomBytes(len int) (byts []byte, err error) {

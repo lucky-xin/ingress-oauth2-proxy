@@ -62,7 +62,7 @@ func TestOAUth2SvrTest(t *testing.T) {
 	tokenKeySvc := key.CreateWithEnv()
 	detailsSvc := details.CreateWithEnv()
 	encryptSvc := conf.CreateWithEnv()
-	s := sign2.Create(detailsSvc, encryptSvc)
+	s := sign2.CreateWithEnv()
 	checker, err := wrapper.Create(
 		tokenResolver,
 		tokenKeySvc,
