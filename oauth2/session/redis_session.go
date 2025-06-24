@@ -78,13 +78,15 @@ func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *
 
 func (svc *Session) CreateSession(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error) {
 	s = sessions.Default(c)
+	log.Println("Creating ses id:", s.ID())
+
 	s.Options(sessions.Options{
 		Domain:   svc.sessionDomain,
 		Path:     env.GetString("OAUTH2_SESSION_PATH", "/"),
 		MaxAge:   int(expire.Seconds()),
 		Secure:   env.GetBool("OAUTH2_SESSION_SECURE", true),
 		HttpOnly: env.GetBool("OAUTH2_SESSION_HTTP_ONLY", true),
-		SameSite: http.SameSiteNoneMode,
+		SameSite: http.SameSite(env.GetInt("OAUTH2_SESSION_SAME_SITE", int(http.SameSiteLaxMode))),
 	})
 	s.Set(key, val)
 	// 必须先执行Session.Save()才能拿到Session id
@@ -99,6 +101,7 @@ func (svc *Session) RedirectUriParamName() string {
 
 func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 	sess := sessions.Default(c)
+	log.Println("GetState...", sess.ID())
 	val := sess.Get(sessStateName)
 	if val == nil {
 		err = errors.New("not found state in session")

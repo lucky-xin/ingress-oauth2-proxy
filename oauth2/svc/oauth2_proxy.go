@@ -133,9 +133,10 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 
 // Check 验证Context之中是否有验证信息，验证成功返回200状态码，否则返回400和其他状态码
 func (svc *OAuth2Svc) Check(c *gin.Context) {
+
 	// 1.尝试从session之中获取认证信息
 	sess := sessions.Default(c)
-	log.Println("try get token from session, session id:" + sess.ID())
+	log.Println("Check...", sess.ID())
 	if sess.ID() != "" {
 		cacheToken := &oauth2.Token{}
 		details := &oauth2.UserDetails{}
@@ -149,6 +150,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	}
 
 	// 2.尝试从请求头，URL参数之中获取token
+	log.Println("try get token from session, session id:" + sess.ID())
 	currToken, err := svc.Checker.GetTokenResolver().Resolve(c)
 	if err != nil || currToken == nil {
 		if err != nil {
@@ -256,7 +258,8 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		return
 	}
 	svc.Session.DeleteState(c)
-	log.Println("callback handle succeed, redirecting to: " + state.RedirectUri)
+	sess := sessions.Default(c)
+	log.Println("callback handle succeed, redirecting to: "+state.RedirectUri, "session id:"+sess.ID())
 	// 将请求转发到原来的地址
 	c.Redirect(http.StatusMovedPermanently, state.RedirectUri)
 }
