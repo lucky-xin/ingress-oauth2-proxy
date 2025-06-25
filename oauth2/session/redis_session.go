@@ -29,7 +29,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
-	mrand "math/rand"
 	"net/http"
 	"time"
 )
@@ -54,7 +53,7 @@ func Create(sessionDomain, uriParamName string, stateExpr time.Duration, rcli re
 	}
 }
 
-func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
+func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
 	ses, err := svc.CreateSession(c, sessUserInfoName, map[string]interface{}{
@@ -68,11 +67,11 @@ func (svc *Session) SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *
 	if ses.Get(sessStateName) != nil {
 		ses.Delete(sessStateName)
 	}
-	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), t, expire).Err()
+	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), token, expire).Err()
 	if err != nil {
 		return
 	}
-	err = svc.rcli.Set(context.Background(), DetailsKey(ses.ID()), claims, RandomDuration(expire, expire*2)).Err()
+	err = svc.rcli.SetNX(context.Background(), DetailsKey(ses.ID()), claims, expire).Err()
 	return
 }
 
@@ -185,9 +184,4 @@ func DetailsKey(suffix string) string {
 
 func Key(state string) string {
 	return oauth2.SessionName + ":state:" + state
-}
-
-// RandomDuration 生成 min ~ max 之间的随机 Duration
-func RandomDuration(min, max time.Duration) time.Duration {
-	return min + time.Duration(mrand.Int63n(int64(max-min)))
 }

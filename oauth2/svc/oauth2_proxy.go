@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	poauth2 "github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
 	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2/session"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/r"
@@ -34,6 +33,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -99,7 +99,7 @@ func Create() (*OAuth2Svc, error) {
 }
 
 // ExchangeAccessTokenByCode get access token by code
-func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token *poauth2.TokenInf, err error) {
+func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token *oauth2.Token, err error) {
 	// http:127.0.0.1:3000/oauth/token?scope=read&grant_type=authorization_code&redirect_uri=
 	//https://www.pistonidata.com&code=
 	reader := strings.NewReader(fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
@@ -126,9 +126,46 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 	if err != nil {
 		return
 	}
-	token = &poauth2.TokenInf{}
+	token = &oauth2.Token{}
 	err = json.Unmarshal(body, &token)
+	if err == nil {
+		token.Type = oauth2.OAUTH2
+	}
 	return
+}
+
+func (svc *OAuth2Svc) RefreshToken(refreshToken string) (token *oauth2.Token, err error) {
+	accessTokenEndpoint := svc.OAuth2IssuerEndpoint + "/oauth/token"
+	formData := url.Values{}
+	formData.Set("scope", svc.Scope)
+	formData.Set("grant_type", "refresh_token")
+	formData.Set("refresh_token", refreshToken)
+	if req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, strings.NewReader(formData.Encode())); err != nil {
+		return nil, err
+	} else {
+		req.Header.Set("Authorization", svc.BasicAuthzHeader)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if resp, err := httpClient.Do(req); err == nil {
+			defer func(body io.ReadCloser) {
+				err := body.Close()
+				if err != nil {
+					log.Println(err)
+				}
+			}(resp.Body)
+			byts, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			token = &oauth2.Token{}
+			err = json.Unmarshal(byts, token)
+			if err != nil {
+				return nil, err
+			}
+			return
+		} else {
+			return nil, err
+		}
+	}
 }
 
 // Check 验证Context之中是否有验证信息，验证成功返回200状态码，否则返回400和其他状态码
@@ -140,9 +177,12 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	if sess.ID() != "" {
 		cacheToken := &oauth2.Token{}
 		details := &oauth2.UserDetails{}
-		err1 := svc.RedisCli.Get(context.Background(), session.TokenKey(sess.ID())).Scan(cacheToken)
-		err2 := svc.RedisCli.Get(context.Background(), session.DetailsKey(sess.ID())).Scan(details)
-		if err1 == nil && err2 == nil && cacheToken != nil {
+		tokenKey := session.TokenKey(sess.ID())
+		detailsKey := session.DetailsKey(sess.ID())
+		err1 := svc.RedisCli.Get(context.Background(), tokenKey).Scan(cacheToken)
+		err2 := svc.RedisCli.Get(context.Background(), detailsKey).Scan(details)
+		if err1 == nil && err2 == nil && cacheToken != nil && details != nil {
+			svc.TryRefreshToken(c)
 			// session 有认证信息直接返回
 			svc.SuccessHandler(c, cacheToken, details)
 			return
@@ -212,6 +252,53 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 	c.Redirect(http.StatusMovedPermanently, redirectUri)
 }
 
+func (svc *OAuth2Svc) TryRefreshToken(c *gin.Context) {
+	go func() {
+		sess := sessions.Default(c)
+		tokenKey := session.TokenKey(sess.ID())
+		detailsKey := session.DetailsKey(sess.ID())
+
+		cacheToken := &oauth2.Token{}
+		details := &oauth2.UserDetails{}
+		err := svc.RedisCli.Get(context.Background(), tokenKey).Scan(cacheToken)
+		if err != nil {
+			log.Println("unable to get token from redis: " + err.Error())
+			return
+		}
+		err = svc.RedisCli.Get(context.Background(), detailsKey).Scan(details)
+		if err != nil {
+			log.Println("unable to get details from redis: " + err.Error())
+			return
+		}
+
+		if cacheToken.RefreshToken == "" {
+			return
+		}
+		// 有效时间小于等于60s则刷新
+		if ttl, err := svc.RedisCli.TTL(context.Background(), tokenKey).Result(); err == nil && ttl > 60 {
+			return
+		}
+		token, err := svc.RefreshToken(cacheToken.RefreshToken)
+		if err != nil {
+			log.Panicf("unable to refresh token: " + err.Error())
+			return
+		}
+		ses := sessions.Default(c)
+		// 更新session之中token信息
+		expire := time.Duration(token.ExpiresIn) * time.Second
+		err = svc.RedisCli.SetEx(context.Background(), session.TokenKey(ses.ID()), token, expire).Err()
+		if err != nil {
+			log.Panicf("unable to save token to session: " + err.Error())
+			return
+		}
+		err = svc.RedisCli.Expire(context.Background(), session.DetailsKey(ses.ID()), expire).Err()
+		if err != nil {
+			log.Panicf("unable to save details to session: " + err.Error())
+			return
+		}
+	}()
+}
+
 // Callback OAuth2 authorize endpoint认证成功回调接口
 func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	// 获取State
@@ -242,8 +329,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		return
 	}
 	// 解析token
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token.AccessToken}
-	details, err := svc.Checker.Check(keyBytes, t)
+	details, err := svc.Checker.Check(keyBytes, token)
 	if err != nil {
 		log.Println("decode token err: ", err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("decode token failed"))
@@ -251,7 +337,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	}
 
 	// 新建session，cookie并将认证信息存入session之中
-	err = svc.Session.SaveAuthorization(c, t, details)
+	err = svc.Session.SaveAuthorization(c, token, details)
 	if err != nil {
 		log.Println("callback handler, unable to save access token to session: " + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
@@ -276,7 +362,7 @@ func (svc *OAuth2Svc) Logout(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, r.Failed("create delete request failed"))
 		return
 	}
-	req.Header.Set("Authorization", string(token.Type)+" "+token.Value)
+	req.Header.Set("Authorization", string(token.Type)+" "+token.AccessToken)
 	_, err = httpClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, r.Failed("send delete request failed"))
@@ -304,7 +390,7 @@ func successHandler(c *gin.Context, token *oauth2.Token, details *oauth2.UserDet
 	c.Header("X-Auth-User-Name", details.Username)
 	c.Header("X-Auth-Role-Ids", Int64SliceToString(details.RoleIds))
 	c.Header("X-Auth-Role-Types", Int64SliceToString(details.RoleTypes))
-	c.Header("Authorization", string(token.Type)+" "+token.Value)
+	c.Header("Authorization", token.AuthorizationHeader())
 	c.JSON(http.StatusOK, r.Succeed("authenticated"))
 }
 

@@ -14,9 +14,9 @@ import (
 
 func TestSerToken(t *testing.T) {
 	token := oauth2.Token{
-		Type:   oauth2.OAUTH2,
-		Value:  "kscjlkjaslhclkjalkjlsjllk",
-		Params: nil,
+		Type:        oauth2.OAUTH2,
+		AccessToken: "kscjlkjaslhclkjalkjlsjllk",
+		Params:      nil,
 	}
 	b, _ := json.Marshal(token)
 	println(string(b))
@@ -29,11 +29,11 @@ func TestSerToken(t *testing.T) {
 	tt := strutil.ToString(tmp["type"])
 	if tt != "" {
 		ot := &oauth2.Token{
-			Type:   oauth2.TokenType(tt),
-			Value:  strings.TrimSpace(strutil.ToString(tmp["value"])),
-			Params: toMap(tmp["params"], nil),
+			Type:        oauth2.TokenType(tt),
+			AccessToken: strings.TrimSpace(strutil.ToString(tmp["value"])),
+			Params:      toMap(tmp["params"], nil),
 		}
-		println(ot.Value)
+		println(ot.AccessToken)
 	}
 }
 

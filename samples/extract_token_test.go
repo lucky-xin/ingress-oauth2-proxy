@@ -102,7 +102,7 @@ func TestExtractToken(test *testing.T) {
 	}
 	println(token)
 	checker := xjwt.CreateWithEnv()
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: token}
+	t := &oauth2.Token{Type: oauth2.OAUTH2, AccessToken: token}
 	deClaims, err := checker.Check([]byte(tk), t)
 	if err != nil {
 		panic(err)

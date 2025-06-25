@@ -108,7 +108,7 @@ func TestOAUth2CliTest(tet *testing.T) {
 	println("access token ->", tokenResp.Data().AccessToken)
 
 	// 解析token
-	t := &oauth2.Token{Type: oauth2.OAUTH2, Value: tokenResp.Data().AccessToken}
+	t := &oauth2.Token{Type: oauth2.OAUTH2, AccessToken: tokenResp.Data().AccessToken}
 	tokenKeySvc := key.CreateWithEnv()
 	resolver := resolver2.Create("oauthz", []oauth2.TokenType{oauth2.OAUTH2})
 	detailsSvc := details.CreateWithEnv()
