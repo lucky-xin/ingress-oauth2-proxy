@@ -14,6 +14,7 @@ import (
 )
 
 func TestSaveSecret(t *testing.T) {
+	println(24 * time.Hour.Milliseconds())
 	byts := [][]byte{
 		securecookie.GenerateRandomKey(64),
 		securecookie.GenerateRandomKey(32),

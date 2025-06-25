@@ -183,7 +183,7 @@ func NewRedisStore(
 			Path:     env.GetString("OAUTH2_SESSION_PATH", "/"),
 			MaxAge:   sessionExpire,
 		},
-		DefaultMaxAge: 60 * 20, // 20 minutes seems like a reasonable default
+		DefaultMaxAge: 60 * 60 * 12, // 20 minutes seems like a reasonable default
 		maxLength:     4096,
 		keyPrefix:     keyPrefix,
 		serializer:    JSONSerializer{},
