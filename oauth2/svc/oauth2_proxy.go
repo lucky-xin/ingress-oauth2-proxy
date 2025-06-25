@@ -343,11 +343,10 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
 		return
 	}
-	svc.Session.DeleteState(c)
 	sess := sessions.Default(c)
 	log.Println("callback handle succeed, redirecting to: "+state.RedirectUri, "session id:"+sess.ID())
 	// 将请求转发到原来的地址
-	c.Redirect(http.StatusMovedPermanently, state.RedirectUri)
+	c.Redirect(http.StatusPermanentRedirect, state.RedirectUri)
 }
 
 func (svc *OAuth2Svc) Logout(c *gin.Context) {

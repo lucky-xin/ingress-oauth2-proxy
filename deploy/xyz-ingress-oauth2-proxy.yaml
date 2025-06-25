@@ -151,7 +151,8 @@ metadata:
   name: d-it-upms-demo
   annotations:
     # https://github.com/kubernetes/ingress-nginx/blob/main/docs/user-guide/nginx-configuration/annotations.md#external-authentication
-    nginx.ingress.kubernetes.io/auth-cache-duration: "401 15s, 200 201 202 30m"
+    # 401错误缓存时间不能太长，否则登陆成功之后在缓存有效时间之内不会调用check请求进行校验
+    nginx.ingress.kubernetes.io/auth-cache-duration: "401 2s,500 3s, 200 201 202 30m"
     nginx.ingress.kubernetes.io/enable-global-auth: "true"
     nginx.ingress.kubernetes.io/auth-keepalive-share-vars: "true"
     nginx.ingress.kubernetes.io/auth-cache-key: "$remote_user"
