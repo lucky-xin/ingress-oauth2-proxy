@@ -1,14 +1,15 @@
 package samples
 
 import (
-	"fmt"
 	"github.com/lucky-xin/xyz-common-go/sign"
 	"github.com/lucky-xin/xyz-common-oauth2-go/oauth2/utils"
 	"testing"
+	"time"
 )
 
 func TestSignRequest(t *testing.T) {
-	fmt.Println(map[string]interface{}{"a": 1, "b": 2})
+
+	println(5 * time.Minute.Milliseconds())
 
 	appId := "f2aa0059a6e4f8bac775c4fd0afcc"
 	appSecret := "125809f6819ANBgkqpiiG9w0BAQEFAASCwggE6AgEAAkEAl3cpw0oz"

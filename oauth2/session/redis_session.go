@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -149,7 +150,11 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	}
 	state = base64.URLEncoding.EncodeToString(buff.Bytes())
 	inf := oauth2.StateInf{Value: state, RedirectUri: ru}
-	_, err = svc.rcli.SetEx(context.Background(), Key(state), inf, svc.stateExpr).Result()
+	byts, err := json.Marshal(inf)
+	if err != nil {
+		return
+	}
+	_, err = svc.rcli.SetEx(context.Background(), Key(state), string(byts), svc.stateExpr).Result()
 	if err != nil {
 		return
 	}

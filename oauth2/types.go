@@ -46,8 +46,8 @@ type TokenInf struct {
 }
 
 type StateInf struct {
-	Value       string `json:"value"`
-	RedirectUri string `json:"ru"`
+	Value       string `json:"value" redis:"value"`
+	RedirectUri string `json:"ru" redis:"value"`
 }
 
 func (m *StateInf) MarshalBinary() ([]byte, error) {
