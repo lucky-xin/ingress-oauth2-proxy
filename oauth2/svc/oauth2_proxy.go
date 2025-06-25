@@ -161,7 +161,7 @@ func (svc *OAuth2Svc) RefreshToken(refreshToken string) (token *oauth2.Token, er
 			if err != nil {
 				return nil, err
 			}
-			return
+			return token, nil
 		} else {
 			return nil, err
 		}
