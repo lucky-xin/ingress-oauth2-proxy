@@ -57,13 +57,11 @@ func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, clai
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
 	inf := map[string]interface{}{
-		"uid":        claims.Id,
-		"tid":        claims.TenantId,
-		"uname":      claims.Username,
-		"expires_at": claims.ExpiresAt.UnixMilli(),
-		"issued_at":  claims.IssuedAt.UnixMilli(),
+		"uid":   claims.Id,
+		"tid":   claims.TenantId,
+		"uname": claims.Username,
 	}
-	ses, err := svc.CreateSession(c, sessUserInfoName, inf, 12*time.Hour)
+	ses, err := svc.Create(c, sessUserInfoName, inf, 12*time.Hour)
 	if err != nil {
 		return
 	}
@@ -78,7 +76,7 @@ func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, clai
 	return
 }
 
-func (svc *Session) CreateSession(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error) {
+func (svc *Session) Create(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error) {
 	s = sessions.Default(c)
 	log.Println("Creating ses id:", s.ID())
 
@@ -97,10 +95,6 @@ func (svc *Session) CreateSession(c *gin.Context, key, val interface{}, expire t
 	return
 }
 
-func (svc *Session) RedirectUriParamName() string {
-	return svc.uriParamName
-}
-
 func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 	sess := sessions.Default(c)
 	log.Println("GetState...", sess.ID())
@@ -109,11 +103,13 @@ func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 		err = errors.New("not found state in session")
 		return
 	}
-	var ru, stateCache, stateUrl string
+	var stateCache, stateUrl string
 	switch val.(type) {
 	case map[string]interface{}:
 		cache := val.(map[string]interface{})
-		stateCache = cache["value"].(string)
+		if sc, ok := cache["value"].(string); ok {
+			stateCache = sc
+		}
 	case string:
 		stateCache = val.(string)
 	}
@@ -123,11 +119,8 @@ func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 		err = errors.New("invalid state in session")
 		return
 	}
-	ru, err = svc.rcli.Get(context.Background(), Key(stateCache)).Result()
-	if err != nil {
-		return
-	}
-	inf = &oauth2.StateInf{Value: stateCache, RedirectUri: ru}
+	inf = &oauth2.StateInf{}
+	err = svc.rcli.Get(context.Background(), Key(stateCache)).Scan(inf)
 	return
 }
 
@@ -155,11 +148,12 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 		return
 	}
 	state = base64.URLEncoding.EncodeToString(buff.Bytes())
-	_, err = svc.rcli.SetEx(context.Background(), Key(state), ru, svc.stateExpr).Result()
+	inf := oauth2.StateInf{Value: state, RedirectUri: ru}
+	_, err = svc.rcli.SetEx(context.Background(), Key(state), inf, svc.stateExpr).Result()
 	if err != nil {
 		return
 	}
-	_, err = svc.CreateSession(c, sessStateName, state, svc.stateExpr)
+	_, err = svc.Create(c, sessStateName, state, svc.stateExpr)
 	return state, err
 }
 

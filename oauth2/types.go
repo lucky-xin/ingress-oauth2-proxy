@@ -20,6 +20,7 @@
 package oauth2
 
 import (
+	"encoding/json"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	xoauth2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
@@ -49,14 +50,22 @@ type StateInf struct {
 	RedirectUri string `json:"ru"`
 }
 
+func (m *StateInf) MarshalBinary() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m *StateInf) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, m)
+}
+
 type Session interface {
-	SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.XyzClaims) (err error)
+	SaveAuthorization(c *gin.Context, t *xoauth2.Token, claims *xoauth2.UserDetails) (err error)
 
-	CreateSession(c *gin.Context, expire time.Duration, key, val interface{}) (s sessions.Session, err error)
+	Create(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error)
 
-	RedirectUriParamName() string
+	CreateState(c *gin.Context) (s string, err error)
 
 	GetState(c *gin.Context) (*StateInf, error)
 
-	CreateState(c *gin.Context) (s string, err error)
+	DeleteState(c *gin.Context)
 }

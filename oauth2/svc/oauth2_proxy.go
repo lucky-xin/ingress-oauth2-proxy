@@ -102,8 +102,11 @@ func Create() (*OAuth2Svc, error) {
 func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token *oauth2.Token, err error) {
 	// http:127.0.0.1:3000/oauth/token?scope=read&grant_type=authorization_code&redirect_uri=
 	//https://www.pistonidata.com&code=
-	reader := strings.NewReader(fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
-		svc.Scope, redirectUri, code))
+	reader := strings.NewReader(
+		fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
+			svc.Scope, redirectUri, code,
+		),
+	)
 	accessTokenEndpoint := svc.OAuth2IssuerEndpoint + "/oauth/token"
 	req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, reader)
 	if err != nil {
@@ -140,7 +143,8 @@ func (svc *OAuth2Svc) RefreshToken(refreshToken string) (token *oauth2.Token, er
 	formData.Set("scope", svc.Scope)
 	formData.Set("grant_type", "refresh_token")
 	formData.Set("refresh_token", refreshToken)
-	if req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, strings.NewReader(formData.Encode())); err != nil {
+	reader := strings.NewReader(formData.Encode())
+	if req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, reader); err != nil {
 		return nil, err
 	} else {
 		req.Header.Set("Authorization", svc.BasicAuthzHeader)
@@ -190,7 +194,6 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	}
 
 	// 2.尝试从请求头，URL参数之中获取token
-	log.Println("try get token from session, session id:" + sess.ID())
 	currToken, err := svc.Checker.GetTokenResolver().Resolve(c)
 	if err != nil || currToken == nil {
 		if err != nil {
@@ -202,14 +205,12 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 
 	// 3.获取JWT token key
 	tk, err := svc.TokenKey.GetTokenKey()
-	log.Println("get token key succeed.")
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
 	// 4.校验token
-	log.Println("found token,type:" + currToken.Type)
 	claims, err := svc.Checker.Check(tk, currToken)
 	if err != nil {
 		log.Println("invalid access token:", err.Error())
@@ -231,13 +232,6 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 // Login 登录，基于OAuth2 authorize endpoint实现，获取原始访问地址redirectUri保存到Redis缓存之中，认证成功之后
 // 从Redis之中获取redirectUri，再将请求转发到该地址
 func (svc *OAuth2Svc) Login(c *gin.Context) {
-	// 获取原始访问地址
-	redirectUri := c.Query(svc.RedirectUriParamName)
-	if redirectUri == "" {
-		c.JSON(http.StatusInternalServerError,
-			r.Failed("not found redirect uri in request in param name:"+svc.RedirectUriParamName))
-		return
-	}
 	// 新建State，并将redirectUri保存
 	s, err := svc.Session.CreateState(c)
 	if err != nil {
@@ -246,7 +240,8 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 		return
 	}
 	// 将请求转发到OAuth2 authorize endpoint
-	redirectUri = fmt.Sprintf("%s/oauth2/authorize?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
+	redirectUri := fmt.Sprintf(
+		"%s/oauth2/authorize?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
 		svc.OAuth2IssuerEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackEndpoint)
 	log.Println("login handler, redirecting to: " + redirectUri)
 	c.Redirect(http.StatusMovedPermanently, redirectUri)
@@ -355,13 +350,13 @@ func (svc *OAuth2Svc) Logout(c *gin.Context) {
 		c.JSON(http.StatusForbidden, r.Failed("not found access token"))
 		return
 	}
-	url := svc.OAuth2IssuerEndpoint + "/oauth2/logout"
-	req, err := http.NewRequest(http.MethodDelete, url, bytes.NewBuffer(nil))
+	logoutUrl := svc.OAuth2IssuerEndpoint + "/oauth2/logout"
+	req, err := http.NewRequest(http.MethodDelete, logoutUrl, bytes.NewBuffer(nil))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, r.Failed("create delete request failed"))
 		return
 	}
-	req.Header.Set("Authorization", string(token.Type)+" "+token.AccessToken)
+	req.Header.Set("Authorization", token.AuthorizationHeader())
 	_, err = httpClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, r.Failed("send delete request failed"))
