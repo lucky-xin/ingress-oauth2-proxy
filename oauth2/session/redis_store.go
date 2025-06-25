@@ -341,7 +341,10 @@ func (s *RedisStore) delete(session *sessions.Session) error {
 func initKeyPairs(rcli redisV9.UniversalClient, lcli *redislock.Client) (byts [][]byte, err error) {
 	initKey := oauth2.SessionName + ":cookie_secret"
 	var block *text.Block
-	res, _ := rcli.Get(context.Background(), initKey).Result()
+	res, err := rcli.Get(context.Background(), initKey).Result()
+	if err != nil {
+		return nil, err
+	}
 	if res != "" {
 		var s []byte
 		s, err = base64.StdEncoding.DecodeString(res)
