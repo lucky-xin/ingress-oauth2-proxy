@@ -85,16 +85,10 @@ func Create() (*OAuth2Svc, error) {
 		LoginCallbackEndpoint: fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
 		RedirectUriParamName:  ruParamName,
 		Checker:               checker,
+		Session:               session.Create(ruParamName, client),
 		TokenKey:              key.CreateWithEnv(),
 		SuccessHandler:        successHandler,
 	}
-
-	auth2Svc.Session = session.Create(
-		env.GetString("OAUTH2_SESSION_DOMAIN", ".xyz.com"),
-		ruParamName,
-		time.Duration(env.GetInt64("OAUTH2_SESSION_STATE_EXPIRE_MS", 3*time.Minute.Milliseconds()))*time.Millisecond,
-		client,
-	)
 	return auth2Svc, nil
 }
 

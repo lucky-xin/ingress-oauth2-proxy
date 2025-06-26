@@ -43,15 +43,27 @@ var (
 )
 
 type Session struct {
-	sessionDomain string
-	uriParamName  string
-	rcli          redis.UniversalClient
-	stateExpr     time.Duration
+	uriParamName string
+	rcli         redis.UniversalClient
+	stateExpr    time.Duration
+	path         string
+	domain       string
+	sameSite     http.SameSite
+	secure       bool
+	httpOnly     bool
 }
 
-func Create(sessionDomain, uriParamName string, stateExpr time.Duration, rcli redis.UniversalClient) *Session {
+func Create(uriParamName string, rcli redis.UniversalClient) *Session {
+	expire := env.GetInt64("OAUTH2_SESSION_STATE_EXPIRE_MS", 3*time.Minute.Milliseconds())
 	return &Session{
-		sessionDomain: sessionDomain, rcli: rcli, uriParamName: uriParamName, stateExpr: stateExpr,
+		rcli:         rcli,
+		uriParamName: uriParamName,
+		stateExpr:    time.Duration(expire) * time.Millisecond,
+		path:         env.GetString("OAUTH2_SESSION_PATH", "/"),
+		domain:       env.GetString("OAUTH2_SESSION_DOMAIN", ""),
+		sameSite:     http.SameSite(env.GetInt("OAUTH2_SESSION_SAME_SITE", int(http.SameSiteLaxMode))),
+		secure:       env.GetBool("OAUTH2_SESSION_SECURE", true),
+		httpOnly:     env.GetBool("OAUTH2_SESSION_HTTP_ONLY", true),
 	}
 }
 
@@ -73,17 +85,8 @@ func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, clai
 		ses.Delete(sessStateName)
 	}
 	for k, v := range inf {
-		c.SetCookie(
-			k,
-			strutil.ToString(v),
-			es,
-			"/",
-			svc.sessionDomain,
-			true,
-			true,
-		)
+		c.SetCookie(k, strutil.ToString(v), es, svc.path, svc.domain, svc.secure, svc.httpOnly)
 	}
-
 	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), token, expire).Err()
 	if err != nil {
 		return
@@ -97,12 +100,12 @@ func (svc *Session) Create(c *gin.Context, key, val interface{}, expire time.Dur
 	log.Println("Creating ses id:", s.ID())
 
 	s.Options(sessions.Options{
-		Domain:   svc.sessionDomain,
-		Path:     env.GetString("OAUTH2_SESSION_PATH", "/"),
+		Domain:   svc.domain,
+		Path:     svc.path,
 		MaxAge:   int(expire.Seconds()),
-		Secure:   env.GetBool("OAUTH2_SESSION_SECURE", true),
-		HttpOnly: env.GetBool("OAUTH2_SESSION_HTTP_ONLY", true),
-		SameSite: http.SameSite(env.GetInt("OAUTH2_SESSION_SAME_SITE", int(http.SameSiteLaxMode))),
+		Secure:   svc.secure,
+		HttpOnly: svc.httpOnly,
+		SameSite: svc.sameSite,
 	})
 	s.Set(key, val)
 	// 必须先执行Session.Save()才能拿到Session id
