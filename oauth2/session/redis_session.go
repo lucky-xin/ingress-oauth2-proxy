@@ -63,7 +63,7 @@ func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, clai
 		"uid":        claims.Id,
 		"tid":        claims.TenantId,
 		"uname":      claims.Username,
-		"expires_at": claims.ExpiresAt.Time.Unix(),
+		"expires_at": claims.ExpiresAt.Time.UnixMilli(),
 	}
 	ses, err := svc.Create(c, sessUserInfoName, inf, 12*time.Hour)
 	if err != nil {
