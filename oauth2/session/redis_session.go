@@ -25,6 +25,7 @@ import (
 	"github.com/lucky-xin/ingress-oauth2-proxy/oauth2"
 	"github.com/lucky-xin/xyz-common-go/env"
 	"github.com/lucky-xin/xyz-common-go/pointer"
+	"github.com/lucky-xin/xyz-common-go/strutil"
 	"github.com/lucky-xin/xyz-common-go/text"
 	xoauth2 "github.com/lucky-xin/xyz-common-oauth2-go/oauth2"
 	"github.com/redis/go-redis/v9"
@@ -57,10 +58,12 @@ func Create(sessionDomain, uriParamName string, stateExpr time.Duration, rcli re
 func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
+	es := int(expire.Seconds())
 	inf := map[string]interface{}{
-		"uid":   claims.Id,
-		"tid":   claims.TenantId,
-		"uname": claims.Username,
+		"uid":        claims.Id,
+		"tid":        claims.TenantId,
+		"uname":      claims.Username,
+		"expires_at": claims.ExpiresAt.Time.Unix(),
 	}
 	ses, err := svc.Create(c, sessUserInfoName, inf, 12*time.Hour)
 	if err != nil {
@@ -69,6 +72,18 @@ func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, clai
 	if ses.Get(sessStateName) != nil {
 		ses.Delete(sessStateName)
 	}
+	for k, v := range inf {
+		c.SetCookie(
+			k,
+			strutil.ToString(v),
+			es,
+			"/",
+			svc.sessionDomain,
+			true,
+			true,
+		)
+	}
+
 	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), token, expire).Err()
 	if err != nil {
 		return
