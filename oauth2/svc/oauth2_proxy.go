@@ -37,7 +37,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var (
@@ -51,19 +50,18 @@ var (
 type SuccessHandler = func(c *gin.Context, token *oauth2.Token, details *oauth2.UserDetails)
 
 type OAuth2Svc struct {
-	ClientId             string
-	Scope                string
-	BasicAuthzHeader     string
-	OAuth2IssuerEndpoint string
-	Checker              authz.Checker
-	TokenKey             authz.TokenKeySvc
-
-	LoginCallbackEndpoint string
-	RedirectUriParamName  string
-	SessionDomain         string
+	clientId              string
+	scope                 string
+	basicAuthzHeader      string
+	oauth2IssuerEndpoint  string
+	checker               authz.Checker
+	tokenKey              authz.TokenKeySvc
+	loginCallbackEndpoint string
+	redirectUriParamName  string
+	sessionDomain         string
+	successHandler        SuccessHandler
+	session               *session.Session
 	RedisCli              redis.UniversalClient
-	Session               *session.Session
-	SuccessHandler        SuccessHandler
 }
 
 func Create() (*OAuth2Svc, error) {
@@ -77,17 +75,17 @@ func Create() (*OAuth2Svc, error) {
 	oauth2ProxyEndpoint := env.GetString("OAUTH2_PROXY_ENDPOINT", "http://127.0.0.1:80")
 	ruParamName := env.GetString("OAUTH2_REDIRECT_URI_PARAM_NAME", "ru")
 	auth2Svc := &OAuth2Svc{
-		OAuth2IssuerEndpoint:  issuerEndpoint,
-		Scope:                 os.Getenv("OAUTH2_SCOPE"),
-		BasicAuthzHeader:      oauth2.CreateBasicAuth(clientId, os.Getenv("OAUTH2_CLIENT_SECRET")),
-		ClientId:              clientId,
+		oauth2IssuerEndpoint:  issuerEndpoint,
+		scope:                 os.Getenv("OAUTH2_SCOPE"),
+		basicAuthzHeader:      oauth2.CreateBasicAuth(clientId, os.Getenv("OAUTH2_CLIENT_SECRET")),
+		clientId:              clientId,
 		RedisCli:              client,
-		LoginCallbackEndpoint: fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
-		RedirectUriParamName:  ruParamName,
-		Checker:               checker,
-		Session:               session.Create(ruParamName, client),
-		TokenKey:              key.CreateWithEnv(),
-		SuccessHandler:        successHandler,
+		loginCallbackEndpoint: fmt.Sprintf("%s/callback", oauth2ProxyEndpoint),
+		redirectUriParamName:  ruParamName,
+		checker:               checker,
+		session:               session.Create(ruParamName, client),
+		tokenKey:              key.CreateWithEnv(),
+		successHandler:        successHandler,
 	}
 	return auth2Svc, nil
 }
@@ -98,15 +96,15 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 	//https://www.pistonidata.com&code=
 	reader := strings.NewReader(
 		fmt.Sprintf("scope=%s&grant_type=authorization_code&redirect_uri=%s&code=%s",
-			svc.Scope, redirectUri, code,
+			svc.scope, redirectUri, code,
 		),
 	)
-	accessTokenEndpoint := svc.OAuth2IssuerEndpoint + "/oauth/token"
+	accessTokenEndpoint := svc.oauth2IssuerEndpoint + "/oauth/token"
 	req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, reader)
 	if err != nil {
 		return
 	}
-	req.Header.Set("Authorization", svc.BasicAuthzHeader)
+	req.Header.Set("Authorization", svc.basicAuthzHeader)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -132,16 +130,16 @@ func (svc *OAuth2Svc) ExchangeAccessTokenByCode(code, redirectUri string) (token
 }
 
 func (svc *OAuth2Svc) RefreshToken(refreshToken string) (token *oauth2.Token, err error) {
-	accessTokenEndpoint := svc.OAuth2IssuerEndpoint + "/oauth/token"
+	accessTokenEndpoint := svc.oauth2IssuerEndpoint + "/oauth/token"
 	formData := url.Values{}
-	formData.Set("scope", svc.Scope)
+	formData.Set("scope", svc.scope)
 	formData.Set("grant_type", "refresh_token")
 	formData.Set("refresh_token", refreshToken)
 	reader := strings.NewReader(formData.Encode())
 	if req, err := http.NewRequest(http.MethodPost, accessTokenEndpoint, reader); err != nil {
 		return nil, err
 	} else {
-		req.Header.Set("Authorization", svc.BasicAuthzHeader)
+		req.Header.Set("Authorization", svc.basicAuthzHeader)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if resp, err := httpClient.Do(req); err == nil {
 			defer func(body io.ReadCloser) {
@@ -173,22 +171,21 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	sess := sessions.Default(c)
 	log.Println("Check...", sess.ID())
 	if sess.ID() != "" {
-		cacheToken := &oauth2.Token{}
+		cacheToken := svc.session.GetToken(c)
 		details := &oauth2.UserDetails{}
-		tokenKey := session.TokenKey(sess.ID())
 		detailsKey := session.DetailsKey(sess.ID())
-		err1 := svc.RedisCli.Get(context.Background(), tokenKey).Scan(cacheToken)
-		err2 := svc.RedisCli.Get(context.Background(), detailsKey).Scan(details)
-		if err1 == nil && err2 == nil && cacheToken != nil && details != nil {
+
+		err := svc.RedisCli.Get(context.Background(), detailsKey).Scan(details)
+		if err == nil && cacheToken != nil && details != nil {
 			svc.TryRefreshToken(c)
 			// session 有认证信息直接返回
-			svc.SuccessHandler(c, cacheToken, details)
+			svc.successHandler(c, cacheToken, details)
 			return
 		}
 	}
 
 	// 2.尝试从请求头，URL参数之中获取token
-	currToken, err := svc.Checker.GetTokenResolver().Resolve(c)
+	currToken, err := svc.checker.GetTokenResolver().Resolve(c)
 	if err != nil || currToken == nil {
 		if err != nil {
 			log.Println("resolve token failed:", err.Error())
@@ -198,28 +195,28 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 	}
 
 	// 3.获取JWT token key
-	tk, err := svc.TokenKey.GetTokenKey()
+	tk, err := svc.tokenKey.GetTokenKey()
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
 	// 4.校验token
-	claims, err := svc.Checker.Check(tk, currToken)
+	claims, err := svc.checker.Check(tk, currToken)
 	if err != nil {
 		log.Println("invalid access token:", err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unauthorized"))
 		return
 	}
 	// 5.新建session，cookie，并将认证结果存入session之中
-	err = svc.Session.SaveAuthorization(c, currToken, claims)
+	err = svc.session.SaveAuthorization(c, currToken, claims)
 	if err != nil {
 		log.Println("cannot save session: ", err.Error())
 		c.JSON(http.StatusInternalServerError, r.Failed("unauthorized"))
 		return
 	}
 	// 6.token校验成功，将认证信息添加到当前请求头
-	svc.SuccessHandler(c, currToken, claims)
+	svc.successHandler(c, currToken, claims)
 	return
 }
 
@@ -227,7 +224,7 @@ func (svc *OAuth2Svc) Check(c *gin.Context) {
 // 从Redis之中获取redirectUri，再将请求转发到该地址
 func (svc *OAuth2Svc) Login(c *gin.Context) {
 	// 新建State，并将redirectUri保存
-	s, err := svc.Session.CreateState(c)
+	s, err := svc.session.CreateState(c)
 	if err != nil {
 		log.Println("unable create state: " + err.Error())
 		c.JSON(http.StatusInternalServerError, r.Failed("unable create state"))
@@ -236,7 +233,7 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 	// 将请求转发到OAuth2 authorize endpoint
 	redirectUri := fmt.Sprintf(
 		"%s/oauth2/authorize?response_type=code&client_id=%s&scope=%s&state=%s&redirect_uri=%s",
-		svc.OAuth2IssuerEndpoint, svc.ClientId, svc.Scope, s, svc.LoginCallbackEndpoint)
+		svc.oauth2IssuerEndpoint, svc.clientId, svc.scope, s, svc.loginCallbackEndpoint)
 	log.Println("login handler, redirecting to: " + redirectUri)
 	c.Redirect(http.StatusMovedPermanently, redirectUri)
 }
@@ -244,27 +241,20 @@ func (svc *OAuth2Svc) Login(c *gin.Context) {
 func (svc *OAuth2Svc) TryRefreshToken(c *gin.Context) {
 	go func() {
 		sess := sessions.Default(c)
-		tokenKey := session.TokenKey(sess.ID())
-		detailsKey := session.DetailsKey(sess.ID())
-
-		cacheToken := &oauth2.Token{}
-		details := &oauth2.UserDetails{}
-		err := svc.RedisCli.Get(context.Background(), tokenKey).Scan(cacheToken)
-		if err != nil {
-			log.Println("unable to get token from redis: " + err.Error())
+		cacheToken := svc.session.GetToken(c)
+		if cacheToken == nil || cacheToken.RefreshToken == "" {
 			return
 		}
-		err = svc.RedisCli.Get(context.Background(), detailsKey).Scan(details)
+		detailsKey := session.DetailsKey(sess.ID())
+		details := &oauth2.UserDetails{}
+		err := svc.RedisCli.Get(context.Background(), detailsKey).Scan(details)
 		if err != nil {
 			log.Println("unable to get details from redis: " + err.Error())
 			return
 		}
-
-		if cacheToken.RefreshToken == "" {
-			return
-		}
-		// 有效时间小于等于60s则刷新
-		if ttl, err := svc.RedisCli.TTL(context.Background(), tokenKey).Result(); err == nil && ttl > 60 {
+		// 有效时间小于等于2分钟则刷新
+		notExpired := details.ExpiresAt.Time.Sub(details.IssuedAt.Time).Minutes() > 2
+		if notExpired {
 			return
 		}
 		token, err := svc.RefreshToken(cacheToken.RefreshToken)
@@ -272,17 +262,23 @@ func (svc *OAuth2Svc) TryRefreshToken(c *gin.Context) {
 			log.Panicf("unable to refresh token: " + err.Error())
 			return
 		}
-		ses := sessions.Default(c)
-		// 更新session之中token信息
-		expire := time.Duration(token.ExpiresIn) * time.Second
-		err = svc.RedisCli.SetEx(context.Background(), session.TokenKey(ses.ID()), token, expire).Err()
+
+		// 3.获取JWT token key
+		tk, err := svc.tokenKey.GetTokenKey()
 		if err != nil {
-			log.Panicf("unable to save token to session: " + err.Error())
+			log.Println("TryRefreshToken, get token key error:" + err.Error())
 			return
 		}
-		err = svc.RedisCli.Expire(context.Background(), session.DetailsKey(ses.ID()), expire).Err()
+		// 4.校验token
+		claims, err := svc.checker.Check(tk, token)
 		if err != nil {
-			log.Panicf("unable to save details to session: " + err.Error())
+			log.Println("TryRefreshToken, invalid access token:", err.Error())
+			return
+		}
+		// 5.新建session，cookie，并将认证结果存入session之中
+		err = svc.session.SaveAuthorization(c, token, claims)
+		if err != nil {
+			log.Println("TryRefreshToken, cannot save session: ", err.Error())
 			return
 		}
 	}()
@@ -291,7 +287,7 @@ func (svc *OAuth2Svc) TryRefreshToken(c *gin.Context) {
 // Callback OAuth2 authorize endpoint认证成功回调接口
 func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	// 获取State
-	state, err := svc.Session.GetState(c)
+	state, err := svc.session.GetState(c)
 	b := err != nil
 	if b || state == nil {
 		var msg string
@@ -304,21 +300,21 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	}
 	// 根据code获取access token
 	code := c.Query("code")
-	token, err := svc.ExchangeAccessTokenByCode(code, svc.LoginCallbackEndpoint)
+	token, err := svc.ExchangeAccessTokenByCode(code, svc.loginCallbackEndpoint)
 	if err != nil {
 		log.Println("unable to exchange code for access token: " + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to exchange code for access token"))
 		return
 	}
 	// 获取JWT 解析key
-	keyBytes, err := svc.TokenKey.GetTokenKey()
+	keyBytes, err := svc.tokenKey.GetTokenKey()
 	if err != nil {
 		log.Println("get token key error:" + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("get token key failed"))
 		return
 	}
 	// 解析token
-	details, err := svc.Checker.Check(keyBytes, token)
+	details, err := svc.checker.Check(keyBytes, token)
 	if err != nil {
 		log.Println("decode token err: ", err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("decode token failed"))
@@ -326,7 +322,7 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 	}
 
 	// 新建session，cookie并将认证信息存入session之中
-	err = svc.Session.SaveAuthorization(c, token, details)
+	err = svc.session.SaveAuthorization(c, token, details)
 	if err != nil {
 		log.Println("callback handler, unable to save access token to session: " + err.Error())
 		c.JSON(http.StatusUnauthorized, r.Failed("unable to save access token to session"))
@@ -339,12 +335,12 @@ func (svc *OAuth2Svc) Callback(c *gin.Context) {
 }
 
 func (svc *OAuth2Svc) Logout(c *gin.Context) {
-	token, err := svc.Checker.GetTokenResolver().Resolve(c)
+	token, err := svc.checker.GetTokenResolver().Resolve(c)
 	if err != nil || token == nil {
 		c.JSON(http.StatusForbidden, r.Failed("not found access token"))
 		return
 	}
-	logoutUrl := svc.OAuth2IssuerEndpoint + "/oauth2/logout"
+	logoutUrl := svc.oauth2IssuerEndpoint + "/oauth2/logout"
 	req, err := http.NewRequest(http.MethodDelete, logoutUrl, bytes.NewBuffer(nil))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, r.Failed("create delete request failed"))
@@ -359,17 +355,11 @@ func (svc *OAuth2Svc) Logout(c *gin.Context) {
 	sess := sessions.Default(c)
 	sess.Clear()
 
-	svc.delToken(c)
-	redirectUri := c.Query(svc.RedirectUriParamName)
+	redirectUri := c.Query(svc.redirectUriParamName)
 	if redirectUri == "" {
 		return
 	}
 	c.Redirect(http.StatusFound, redirectUri)
-}
-
-func (svc *OAuth2Svc) delToken(c *gin.Context) {
-	sess := sessions.Default(c)
-	svc.RedisCli.Del(context.Background(), session.TokenKey(sess.ID()))
 }
 
 func successHandler(c *gin.Context, token *oauth2.Token, details *oauth2.UserDetails) {

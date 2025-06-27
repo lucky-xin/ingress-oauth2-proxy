@@ -36,10 +36,10 @@ import (
 )
 
 var (
-	sessStateName    = "_state_"
-	sessUserInfoName = "_principal_"
-	stateFieldName   = "state"
-	MagicByte        = byte(9)
+	sessStateName  = "_state_"
+	sessAuthzName  = "_principal_"
+	stateFieldName = "state"
+	MagicByte      = byte(9)
 )
 
 type Session struct {
@@ -70,28 +70,15 @@ func Create(uriParamName string, rcli redis.UniversalClient) *Session {
 func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
 	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	// 必须先执行Session.Save()才能拿到Session id
-	es := int(expire.Seconds())
-	inf := map[string]interface{}{
-		"uid":        claims.Id,
-		"tid":        claims.TenantId,
-		"uname":      claims.Username,
-		"expires_at": claims.ExpiresAt.Time.UnixMilli(),
-	}
-	ses, err := svc.Create(c, sessUserInfoName, inf, 12*time.Hour)
+	ses, err := svc.Create(c, sessAuthzName, token, 12*time.Hour)
 	if err != nil {
 		return
 	}
 	if ses.Get(sessStateName) != nil {
 		ses.Delete(sessStateName)
 	}
-	for k, v := range inf {
-		c.SetCookie(k, strutil.ToString(v), es, svc.path, svc.domain, svc.secure, svc.httpOnly)
-	}
-	err = svc.rcli.Set(context.Background(), TokenKey(ses.ID()), token, expire).Err()
-	if err != nil {
-		return
-	}
-	err = svc.rcli.SetNX(context.Background(), DetailsKey(ses.ID()), claims, expire).Err()
+	err = svc.rcli.Set(context.Background(), DetailsKey(ses.ID()), claims, expire).Err()
+	svc.SaveAuthzToCookie(c, claims)
 	return
 }
 
@@ -112,6 +99,44 @@ func (svc *Session) Create(c *gin.Context, key, val interface{}, expire time.Dur
 	err = s.Save()
 	log.Println("Created ses id:", s.ID())
 	return
+}
+
+func (svc *Session) Get(c *gin.Context, key string) interface{} {
+	s := sessions.Default(c)
+	log.Println("Get ses id:", s.ID())
+	return s.Get(key)
+}
+
+func (svc *Session) GetToken(c *gin.Context) (token *xoauth2.Token) {
+	t := svc.Get(c, sessAuthzName)
+	if t == nil {
+		return
+	}
+	if m, ok := t.(map[string]interface{}); ok {
+		token = &xoauth2.Token{
+			AccessToken:  strutil.ToString(m["access_token"]),
+			RefreshToken: strutil.ToString(m["refresh_token"]),
+			Scope:        strutil.ToString(m["scope"]),
+			Type:         xoauth2.TokenType(strutil.ToString(m["token_type"])),
+			ExpiresIn:    strutil.ToInt(strutil.ToString(m["expires_at"]), 0),
+			Params:       m["params"].(map[string]string),
+		}
+	}
+	return
+}
+
+func (svc *Session) SaveAuthzToCookie(c *gin.Context, claims *xoauth2.UserDetails) {
+	inf := map[string]interface{}{
+		"uid":        claims.Id,
+		"tid":        claims.TenantId,
+		"uname":      claims.Username,
+		"expires_at": claims.ExpiresAt.Time.UnixMilli(),
+	}
+	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+	es := int(expire.Seconds())
+	for k, v := range inf {
+		c.SetCookie(k, strutil.ToString(v), es, svc.path, svc.domain, svc.secure, svc.httpOnly)
+	}
 }
 
 func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
@@ -192,10 +217,6 @@ func createRandomBytes(len int) (byts []byte, err error) {
 	}
 	byts = b
 	return
-}
-
-func TokenKey(suffix string) string {
-	return oauth2.SessionName + ":token:" + suffix
 }
 
 func DetailsKey(suffix string) string {

@@ -63,6 +63,8 @@ type Session interface {
 
 	Create(c *gin.Context, key, val interface{}, expire time.Duration) (s sessions.Session, err error)
 
+	Get(c *gin.Context, key string) (s interface{})
+
 	CreateState(c *gin.Context) (s string, err error)
 
 	GetState(c *gin.Context) (*StateInf, error)

@@ -70,10 +70,10 @@ func main() {
 		})
 	})
 	// ingress-oauth2-proxy token校验API，每次请求都会进行拦截，验证当前session是否有验证信息
-	engine.GET("/check", func(c *gin.Context) {
-		auth2Svc.Check(c)
-	}).
-		// 登录API
+	engine.
+		GET("/check", func(c *gin.Context) {
+			auth2Svc.Check(c)
+		}).
 		GET("/login", func(c *gin.Context) {
 			auth2Svc.Login(c)
 		}).
