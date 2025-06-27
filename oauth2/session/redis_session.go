@@ -113,13 +113,17 @@ func (svc *Session) GetToken(c *gin.Context) (token *xoauth2.Token) {
 		return
 	}
 	if m, ok := t.(map[string]interface{}); ok {
+		params := map[string]string{}
+		if m1, o := m["params"].(map[string]string); o {
+			params = m1
+		}
 		token = &xoauth2.Token{
 			AccessToken:  strutil.ToString(m["access_token"]),
 			RefreshToken: strutil.ToString(m["refresh_token"]),
 			Scope:        strutil.ToString(m["scope"]),
 			Type:         xoauth2.TokenType(strutil.ToString(m["token_type"])),
 			ExpiresIn:    strutil.ToInt(strutil.ToString(m["expires_at"]), 0),
-			Params:       m["params"].(map[string]string),
+			Params:       params,
 		}
 	}
 	return
