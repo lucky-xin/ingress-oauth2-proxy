@@ -68,7 +68,8 @@ func Create(uriParamName string, rcli redis.UniversalClient) *Session {
 }
 
 func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
-	svc.DeleteState(c)
+	sessions.Default(c).Delete(sessStateName)
+
 	ses, err := svc.Create(c, sessAuthzName, token, 12*time.Hour)
 	if err != nil {
 		return
@@ -165,7 +166,7 @@ func (svc *Session) GetState(c *gin.Context) (inf *oauth2.StateInf, err error) {
 		return
 	}
 	inf = &oauth2.StateInf{}
-	err = svc.rcli.Get(context.Background(), Key(stateCache)).Scan(inf)
+	err = svc.rcli.Get(context.Background(), StateKey(stateCache)).Scan(inf)
 	return
 }
 
@@ -198,7 +199,7 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	if err != nil {
 		return
 	}
-	_, err = svc.rcli.SetEx(context.Background(), Key(state), string(byts), svc.stateExpr).Result()
+	_, err = svc.rcli.SetEx(context.Background(), StateKey(state), string(byts), svc.stateExpr).Result()
 	if err != nil {
 		return
 	}
@@ -206,9 +207,10 @@ func (svc *Session) CreateState(c *gin.Context) (state string, err error) {
 	return state, err
 }
 
-func (svc *Session) DeleteState(c *gin.Context) {
+func (svc *Session) DeleteState(c *gin.Context, state string) {
 	sess := sessions.Default(c)
 	sess.Delete(sessStateName)
+	svc.rcli.Del(context.Background(), StateKey(state))
 }
 
 func createRandomBytes(len int) (byts []byte, err error) {
@@ -224,6 +226,6 @@ func DetailsKey(suffix string) string {
 	return oauth2.SessionName + ":details:" + suffix
 }
 
-func Key(state string) string {
+func StateKey(state string) string {
 	return oauth2.SessionName + ":state:" + state
 }
