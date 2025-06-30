@@ -68,15 +68,12 @@ func Create(uriParamName string, rcli redis.UniversalClient) *Session {
 }
 
 func (svc *Session) SaveAuthorization(c *gin.Context, token *xoauth2.Token, claims *xoauth2.UserDetails) (err error) {
-	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
-	// 必须先执行Session.Save()才能拿到Session id
+	svc.DeleteState(c)
 	ses, err := svc.Create(c, sessAuthzName, token, 12*time.Hour)
 	if err != nil {
 		return
 	}
-	if ses.Get(sessStateName) != nil {
-		ses.Delete(sessStateName)
-	}
+	expire := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
 	err = svc.rcli.Set(context.Background(), DetailsKey(ses.ID()), claims, expire).Err()
 	svc.SaveAuthzToCookie(c, claims)
 	return
